@@ -23,26 +23,27 @@ export default function App() {
   const [pendingUsers, setPendingUsers] = useState<any[]>([]);
   const [badges, setBadges] = useState({ maint: 0, users: 0, transfer: 0 });
   
-  const [isSidebarOpen, setSidebarOpen] = useState(window.innerWidth > 1024);
+  // RESPONSIVE STATES
+  const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+  const isMobile = windowWidth <= 1024;
+  const [isSidebarOpen, setSidebarOpen] = useState(!isMobile);
   const [showLogin, setShowLogin] = useState(false);
 
-  // QUẢN LÝ THEME
-  const [settings, setSettings] = useState(() => {
-    const saved = localStorage.getItem('hams_settings');
-    return saved ? JSON.parse(saved) : { theme: 'dark', fontSize: 'medium' };
-  });
+  useEffect(() => {
+    const handleResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const isAdmin = session?.Roles?.roleName === 'ADMIN' || session?.username === 'admin';
 
   const fetchAllData = useCallback(async () => {
     if (!session) return;
     try {
-      // 1. Tải tài sản
       let aq = supabase.from('TrangThietBi').select('*, KhoaPhong(tenKhoaPhong, maKhoaPhong), HangSanXuat(tenHangSanXuat), HoSoThietBi(*), LichBaoTri(*), QuanLySuCo(*), SuaChuaChiTiet(*)');
       if (!isAdmin && session.khoaPhongId) aq = aq.eq('khoaPhongId', session.khoaPhongId);
       const { data: ads } = await aq.order('createdAt', { ascending: false });
 
-      // 2. Tải thông báo & Người dùng chờ duyệt
       const [mRes, uRes, tRes, pUsers] = await Promise.all([
         supabase.from('LichBaoTri').select('id', { count: 'exact' }).eq('trangThai', 'PENDING'),
         supabase.from('Users').select('id', { count: 'exact' }).eq('status', 'PENDING'),
@@ -58,6 +59,12 @@ export default function App() {
 
   useEffect(() => { fetchAllData(); }, [fetchAllData]);
 
+  // SETTINGS (THEME)
+  const [settings, setSettings] = useState(() => {
+    const saved = localStorage.getItem('hams_settings');
+    return saved ? JSON.parse(saved) : { theme: 'dark', fontSize: 'medium' };
+  });
+
   const theme = settings.theme === 'dark' ? {
     bg: '#06090f', sidebar: '#0d1520', card: '#111d2e', text: '#e2e8f0', border: '#1a2840', muted: '#64748b'
   } : {
@@ -70,10 +77,8 @@ export default function App() {
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: theme.bg, color: theme.text, fontFamily: 'Inter, sans-serif' }}>
       
-      {/* MOBILE MENU TOGGLE */}
-      <button style={ui.mobileToggle} onClick={() => setSidebarOpen(!isSidebarOpen)}>☰</button>
+      {isMobile && <button style={ui.mobileToggle} onClick={() => setSidebarOpen(!isSidebarOpen)}>☰</button>}
 
-      {/* SIDEBAR */}
       <div style={{...ui.sidebar, background: theme.sidebar, borderRight: `1px solid ${theme.border}`, left: isSidebarOpen ? 0 : -280}}>
         <div style={{...ui.logoArea, borderBottom: `1px solid ${theme.border}`}}>
           <h2 style={{ color: '#00d4a8', margin: 0 }}>🏥 HAMS PRO</h2>
@@ -81,33 +86,31 @@ export default function App() {
         </div>
 
         <nav style={{ flex: 1, padding: '0 20px' }}>
-          <MenuLink active={view==='DASHBOARD'} onClick={()=>{setView('DASHBOARD'); setSidebarOpen(window.innerWidth > 1024);}} icon="📊" label="Dashboard" theme={theme} />
-          <MenuLink active={view==='ASSETS'} onClick={()=>{setView('ASSETS'); setSelectedAsset(null); setSidebarOpen(window.innerWidth > 1024);}} icon="📦" label="Tài sản" theme={theme} />
-          <MenuLink active={view==='MAINTENANCE'} onClick={()=>{setView('MAINTENANCE'); setSidebarOpen(window.innerWidth > 1024);}} icon="🔧" label="Bảo trì" badge={badges.maint} theme={theme} />
-          <MenuLink active={view==='TRANSFER'} onClick={()=>{setView('TRANSFER'); setSidebarOpen(window.innerWidth > 1024);}} icon="🚚" label="Điều chuyển" badge={badges.transfer} theme={theme} />
-          {isAdmin && <MenuLink active={view==='CATALOG'} onClick={()=>{setView('CATALOG'); setSidebarOpen(window.innerWidth > 1024);}} icon="📂" label="Danh mục" theme={theme} />}
-          <MenuLink active={view==='REPORT'} onClick={()=>{setView('REPORT'); setSidebarOpen(window.innerWidth > 1024);}} icon="📈" label="Báo cáo" theme={theme} />
-          <MenuLink active={view==='SETTINGS'} onClick={()=>{setView('SETTINGS'); setSidebarOpen(window.innerWidth > 1024);}} icon="⚙️" label="Cài đặt" theme={theme} />
+          <MenuLink active={view==='DASHBOARD'} onClick={()=>{setView('DASHBOARD'); if(isMobile) setSidebarOpen(false);}} icon="📊" label="Dashboard" theme={theme} />
+          <MenuLink active={view==='ASSETS'} onClick={()=>{setView('ASSETS'); setSelectedAsset(null); if(isMobile) setSidebarOpen(false);}} icon="📦" label="Tài sản" theme={theme} />
+          <MenuLink active={view==='MAINTENANCE'} onClick={()=>{setView('MAINTENANCE'); if(isMobile) setSidebarOpen(false);}} icon="🔧" label="Bảo trì" badge={badges.maint} theme={theme} />
+          <MenuLink active={view==='TRANSFER'} onClick={()=>{setView('TRANSFER'); if(isMobile) setSidebarOpen(false);}} icon="🚚" label="Điều chuyển" badge={badges.transfer} theme={theme} />
+          {isAdmin && !isMobile && <MenuLink active={view==='CATALOG'} onClick={()=>{setView('CATALOG'); if(isMobile) setSidebarOpen(false);}} icon="📂" label="Danh mục" theme={theme} />}
+          <MenuLink active={view==='REPORT'} onClick={()=>{setView('REPORT'); if(isMobile) setSidebarOpen(false);}} icon="📈" label="Báo cáo" theme={theme} />
+          <MenuLink active={view==='SETTINGS'} onClick={()=>{setView('SETTINGS'); if(isMobile) setSidebarOpen(false);}} icon="⚙️" label="Cài đặt" theme={theme} />
         </nav>
 
         <button onClick={() => { setSession(null); setShowLogin(false); }} style={ui.logoutBtn}>🚪 Đăng xuất</button>
       </div>
 
-      {/* OVERLAY FOR MOBILE */}
-      {isSidebarOpen && window.innerWidth <= 1024 && <div style={ui.overlay} onClick={() => setSidebarOpen(false)} />}
+      {isSidebarOpen && isMobile && <div style={ui.overlay} onClick={() => setSidebarOpen(false)} />}
 
-      {/* MAIN CONTENT */}
-      <div style={{ ...ui.mainContent, marginLeft: window.innerWidth > 1024 ? 280 : 0 }}>
-        {view === 'DASHBOARD' && <ModuleDashboard assets={assets} pendingUsers={pendingUsers} onRefresh={fetchAllData} theme={theme} />}
+      <div style={{ ...ui.mainContent, marginLeft: isMobile ? 0 : 280 }}>
+        {view === 'DASHBOARD' && <ModuleDashboard assets={assets} pendingUsers={pendingUsers} onRefresh={fetchAllData} theme={theme} isMobile={isMobile} />}
         {view === 'ASSETS' && (
           !selectedAsset ? 
-          <ModuleAssetList assets={assets} isAdmin={isAdmin} onSelect={setSelectedAsset} onRefresh={fetchAllData} theme={theme} /> : 
-          <ModuleAssetDetail asset={selectedAsset} onBack={()=>setSelectedAsset(null)} onRefresh={fetchAllData} session={session} theme={theme} />
+          <ModuleAssetList assets={assets} isAdmin={isAdmin} isMobile={isMobile} onSelect={setSelectedAsset} onRefresh={fetchAllData} theme={theme} /> : 
+          <ModuleAssetDetail asset={selectedAsset} onBack={()=>setSelectedAsset(null)} onRefresh={fetchAllData} session={session} theme={theme} isMobile={isMobile} />
         )}
-        {view === 'MAINTENANCE' && <ModuleMaintenance />}
-        {view === 'TRANSFER' && <ModuleTransfer isAdmin={isAdmin} session={session} onRefresh={fetchAllData} />}
+        {view === 'MAINTENANCE' && <ModuleMaintenance isMobile={isMobile} theme={theme} />}
+        {view === 'TRANSFER' && <ModuleTransfer isAdmin={isAdmin} session={session} onRefresh={fetchAllData} isMobile={isMobile} theme={theme} />}
         {view === 'CATALOG' && <ModuleCatalog />}
-        {view === 'REPORT' && <ModuleReport assets={assets} />}
+        {view === 'REPORT' && <ModuleReport assets={assets} isMobile={isMobile} />}
         {view === 'SETTINGS' && <ModuleSettings settings={settings} onUpdate={setSettings} />}
       </div>
     </div>
@@ -115,11 +118,7 @@ export default function App() {
 }
 
 const MenuLink = ({ active, onClick, icon, label, badge, theme }: any) => (
-  <div onClick={onClick} style={{ 
-    padding: '12px 15px', borderRadius: 12, cursor: 'pointer', marginBottom: 5, 
-    display: 'flex', alignItems: 'center', justifyContent: 'space-between', 
-    background: active ? '#3b82f6' : 'transparent', color: active ? '#fff' : theme.text
-  }}>
+  <div onClick={onClick} style={{ padding: '12px 15px', borderRadius: 12, cursor: 'pointer', marginBottom: 5, display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: active ? '#3b82f6' : 'transparent', color: active ? '#fff' : theme.text }}>
     <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
       <span style={{ fontSize: 18 }}>{icon}</span>
       <span style={{ fontWeight: active ? 700 : 400, fontSize: 14 }}>{label}</span>
@@ -134,6 +133,6 @@ const ui: any = {
   mainContent: { flex: 1, padding: '20px', boxSizing: 'border-box', transition: '0.3s' },
   badge: { background: '#ef4444', color: '#fff', padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 'bold' },
   logoutBtn: { margin: '20px', background: 'none', border: '1px solid #ef444440', color: '#ef4444', padding: '12px', borderRadius: 10, cursor: 'pointer', fontWeight: 'bold' },
-  mobileToggle: { position: 'fixed', top: 15, left: 15, zIndex: 1002, background: '#3b82f6', border: 'none', color: '#fff', width: 40, height: 40, borderRadius: 8, cursor: 'pointer', display: window.innerWidth > 1024 ? 'none' : 'block' },
+  mobileToggle: { position: 'fixed', top: 15, left: 15, zIndex: 1002, background: '#3b82f6', border: 'none', color: '#fff', width: 40, height: 40, borderRadius: 8, cursor: 'pointer' },
   overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000 }
 };
