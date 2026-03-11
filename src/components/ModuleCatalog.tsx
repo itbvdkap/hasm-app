@@ -1,32 +1,60 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
-import * as XLSX from 'xlsx';
 
-const T = {
-  bg: "#06080d", surf: "#0b1017", card: "#111d2e", bdr: "#1a2840",
-  teal: "#00d4a8", blue: "#3b82f6", muted: "#64748b", txt: "#e2e8f0", red: "#ef4444", yellow: "#f59e0b"
-};
+const T = { bg: "#06080d", surf: "#0b1017", card: "#111d2e", bdr: "#1a2840", teal: "#00d4a8", blue: "#3b82f6", muted: "#64748b", txt: "#e2e8f0", red: "#ef4444" };
 
 export const ModuleCatalog = () => {
   const [tab, setTab] = useState('KHOA_PHONG');
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState<any>({});
 
-  // CẤU HÌNH DANH MỤC CHUẨN HOÁ & PHÂN QUYỀN
+  // Cấu hình đầy đủ trường cho từng bảng theo Schema
   const CATALOG_TABS = [
-    { id: 'KHOA_PHONG', label: 'Khoa / Phòng', icon: '🏢', table: 'KhoaPhong', cols: [{key: 'tenKhoaPhong', label: 'Tên khoa'}, {key: 'maKhoaPhong', label: 'Mã khoa'}] },
-    { id: 'HANG_SX', label: 'Hãng sản xuất', icon: '🏭', table: 'HangSanXuat', cols: [{key: 'tenHangSanXuat', label: 'Tên hãng'}, {key: 'nuocSanXuat', label: 'Nước SX'}] },
-    { id: 'DM_THIET_BI', label: 'Tên máy chuẩn', icon: '🩺', table: 'DanhMucThietBi', cols: [{key: 'tenThietBi', label: 'Tên máy'}, {key: 'maThietBi', label: 'Mã loại'}] },
-    { id: 'NGUON_GOC', label: 'Nguồn gốc/Dự án', icon: '🌐', table: 'NguonGocThietBi', cols: [{key: 'tenNguonGoc', label: 'Tên nguồn'}] },
-    { id: 'NHAN_VIEN', label: 'Nhân viên', icon: '👥', table: 'Users', cols: [{key: 'fullName', label: 'Họ tên'}, {key: 'username', label: 'Tài khoản'}, {key: 'email', label: 'Email'}] },
-    { id: 'PHAN_QUYEN', label: 'Nhóm quyền', icon: '🛡️', table: 'Roles', cols: [{key: 'roleName', label: 'Tên nhóm'}, {key: 'description', label: 'Mô tả'}] },
-    { id: 'DON_VI_DV', label: 'Đơn vị dịch vụ', icon: '🛠️', table: 'DonViDichVu', cols: [{key: 'tenDonVi', label: 'Tên đơn vị'}, {key: 'soDienThoai', label: 'SĐT'}] }
+    { 
+        id: 'KHOA_PHONG', label: 'Khoa / Phòng', icon: '🏢', table: 'KhoaPhong', 
+        fields: [
+            { key: 'maKhoaPhong', label: 'Mã khoa (Ngắn)', type: 'text', required: true },
+            { key: 'tenKhoaPhong', label: 'Tên đầy đủ', type: 'text', required: true },
+            { key: 'toaNha', label: 'Toà nhà', type: 'text' },
+            { key: 'tang', label: 'Tầng', type: 'text' },
+            { key: 'moTa', label: 'Ghi chú mô tả', type: 'textarea' }
+        ]
+    },
+    { 
+        id: 'DM_THIET_BI', label: 'Tên máy chuẩn', icon: '🩺', table: 'DanhMucThietBi',
+        fields: [
+            { key: 'maThietBi', label: 'Mã loại (Vd: SA01)', type: 'text' },
+            { key: 'tenThietBi', label: 'Tên thiết bị chuẩn', type: 'text', required: true }
+        ]
+    },
+    { 
+        id: 'HANG_SX', label: 'Hãng sản xuất', icon: '🏭', table: 'HangSanXuat',
+        fields: [
+            { key: 'tenHangSanXuat', label: 'Tên hãng SX', type: 'text', required: true },
+            { key: 'nuocSanXuat', label: 'Nước sản xuất', type: 'text' },
+            { key: 'moTa', label: 'Thông tin hãng', type: 'textarea' }
+        ]
+    },
+    { 
+        id: 'DON_VI_DV', label: 'Đơn vị dịch vụ', icon: '🛠️', table: 'DonViDichVu',
+        fields: [
+            { key: 'tenDonVi', label: 'Tên đơn vị sửa chữa', type: 'text', required: true },
+            { key: 'soDienThoai', label: 'Số điện thoại', type: 'text' },
+            { key: 'diaChi', label: 'Địa chỉ', type: 'text' }
+        ]
+    },
+    { 
+        id: 'PHAN_QUYEN', label: 'Nhóm quyền', icon: '🛡️', table: 'Roles',
+        fields: [
+            { key: 'roleName', label: 'Tên nhóm quyền', type: 'text', required: true },
+            { key: 'description', label: 'Mô tả quyền hạn', type: 'text' }
+        ]
+    }
   ];
 
-  const activeTab = CATALOG_TABS.find(t => t.id === tab)!;
+  const activeTab = CATALOG_TABS.find(t=>t.id===tab)!;
 
   const fetchData = async () => {
     setLoading(true);
@@ -37,68 +65,25 @@ export const ModuleCatalog = () => {
 
   useEffect(() => { fetchData(); }, [tab]);
 
-  // --- CHỨC NĂNG EXCEL ---
-  const downloadTemplate = () => {
-    const headers = activeTab.cols.map(c => c.label);
-    const ws = XLSX.utils.aoa_to_sheet([headers]);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Template");
-    XLSX.writeFile(wb, `Mau_Nhap_${activeTab.label}.xlsx`);
-  };
-
-  const handleImportExcel = (e: any) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async (evt) => {
-      const bstr = evt.target?.result;
-      const wb = XLSX.read(bstr, { type: 'binary' });
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const rawData: any[] = XLSX.utils.sheet_to_json(ws);
-      
-      // Map dữ liệu từ label tiếng Việt sang key Database
-      const importData = rawData.map(row => {
-        const item: any = {};
-        activeTab.cols.forEach(c => {
-          item[c.key] = row[c.label];
-        });
-        return item;
-      });
-
-      const { error } = await supabase.from(activeTab.table).insert(importData);
-      if (error) alert("Lỗi import: " + error.message);
-      else { alert(`Đã nhập thành công ${importData.length} bản ghi!`); fetchData(); }
-    };
-    reader.readAsBinaryString(file);
-  };
-
-  // --- CRUD LOGIC ---
   const handleSave = async () => {
-    setSaving(true);
     try {
-      if (formData.id) await supabase.from(activeTab.table).update(formData).eq('id', formData.id);
-      else await supabase.from(activeTab.table).insert([formData]);
+      const payload = { ...formData };
+      if (payload.id) {
+        await supabase.from(activeTab.table).update(payload).eq('id', payload.id);
+      } else {
+        await supabase.from(activeTab.table).insert([payload]);
+      }
+      alert("Đã lưu thành công!");
       setShowModal(false);
       fetchData();
     } catch (e: any) { alert(e.message); }
-    finally { setSaving(false); }
   };
 
   return (
     <div style={s.container}>
       <div style={s.header}>
-        <div>
-            <h1 style={{margin: 0}}>📂 Quản lý danh mục</h1>
-            <p style={{color: T.muted, fontSize: 13, marginTop: 5}}>Thiết lập dữ liệu nền tảng cho hệ thống HAMS</p>
-        </div>
-        <div style={{display: 'flex', gap: 10}}>
-            <button style={s.ghostBtn} onClick={downloadTemplate}>📥 Tải file mẫu</button>
-            <label style={s.importBtn}>
-                📤 Nhập Excel
-                <input type="file" hidden onChange={handleImportExcel} accept=".xlsx, .xls" />
-            </label>
-            <button style={s.addBtn} onClick={() => { setFormData({}); setShowModal(true); }}>+ Thêm bản ghi</button>
-        </div>
+        <h1 style={{margin: 0}}>⚙️ Cấu hình Danh mục</h1>
+        <button style={s.addBtn} onClick={() => { setFormData({}); setShowModal(true); }}>+ Thêm mới {activeTab.label}</button>
       </div>
 
       <div style={s.tabBar}>
@@ -111,21 +96,24 @@ export const ModuleCatalog = () => {
         <table style={s.table}>
           <thead>
             <tr style={s.thRow}>
-              {activeTab.cols.map(c => <th key={c.key} style={s.th}>{c.label}</th>)}
-              <th style={{...s.th, textAlign: 'right'}}>Thao tác</th>
+              {activeTab.fields.slice(0, 3).map(f => <th key={f.key} style={s.th}>{f.label}</th>)}
+              <th style={{textAlign: 'right'}}>Thao tác</th>
             </tr>
           </thead>
           <tbody>
             {data.map(item => (
               <tr key={item.id} style={s.tr}>
-                {activeTab.cols.map(c => <td key={c.key} style={s.td}>{item[c.key] || '---'}</td>)}
+                {activeTab.fields.slice(0, 3).map(f => (
+                    <td key={f.key} style={s.td}>
+                        {f.key.includes('ten') ? <b>{item[f.key]}</b> : item[f.key] || '---'}
+                    </td>
+                ))}
                 <td style={{...s.td, textAlign: 'right'}}>
                   <button onClick={() => { setFormData(item); setShowModal(true); }} style={s.actionBtn}>Sửa</button>
-                  <button onClick={async () => { 
-                    if(confirm("Xoá bản ghi?")) {
+                  <button onClick={async () => {
+                    if(confirm("Xoá?")) {
                         const {error} = await supabase.from(activeTab.table).delete().eq('id', item.id);
-                        if(error) alert("Không thể xoá dữ liệu đang sử dụng!");
-                        else fetchData();
+                        if(error) alert("Dữ liệu đang được sử dụng!"); else fetchData();
                     }
                   }} style={{...s.actionBtn, color: T.red}}>Xoá</button>
                 </td>
@@ -138,18 +126,22 @@ export const ModuleCatalog = () => {
       {showModal && (
         <div style={s.modalOverlay}>
           <div style={s.modalContent}>
-            <h3 style={{marginTop: 0, color: T.teal}}>{formData.id ? '📝 Chỉnh sửa' : '➕ Thêm mới'} {activeTab.label}</h3>
+            <h3 style={{marginTop: 0, color: T.teal}}>Khai báo {activeTab.label}</h3>
             <div style={{display: 'flex', flexDirection: 'column', gap: 15}}>
-                {activeTab.cols.map(c => (
-                    <div key={c.key}>
-                        <label style={s.label}>{c.label}</label>
-                        <input style={s.input} value={formData[c.key] || ''} onChange={e => setFormData({...formData, [c.key]: e.target.value})} />
+                {activeTab.fields.map(f => (
+                    <div key={f.key}>
+                        <label style={s.label}>{f.label} {f.required && '*'}</label>
+                        {f.type === 'textarea' ? (
+                            <textarea style={s.input} value={formData[f.key] || ''} onChange={e => setFormData({...formData, [f.key]: e.target.value})} rows={3} />
+                        ) : (
+                            <input style={s.input} value={formData[f.key] || ''} onChange={e => setFormData({...formData, [f.key]: e.target.value})} />
+                        )}
                     </div>
                 ))}
             </div>
             <div style={s.modalActions}>
               <button onClick={() => setShowModal(false)} style={s.cancelBtn}>Bỏ qua</button>
-              <button onClick={handleSave} style={s.saveBtn}>{saving ? 'Đang lưu...' : 'Lưu dữ liệu'}</button>
+              <button onClick={handleSave} style={s.saveBtn}>Xác nhận lưu</button>
             </div>
           </div>
         </div>
@@ -160,27 +152,21 @@ export const ModuleCatalog = () => {
 
 const s: any = {
   container: { padding: '20px' },
-  header: { display: 'flex', justifyContent: 'space-between', marginBottom: 30, alignItems: 'center' },
+  header: { display: 'flex', justifyContent: 'space-between', marginBottom: 25 },
   addBtn: { background: T.blue, color: '#fff', border: 'none', padding: '10px 20px', borderRadius: 8, cursor: 'pointer', fontWeight: 'bold' },
-  importBtn: { background: T.teal, color: '#000', padding: '10px 20px', borderRadius: 8, cursor: 'pointer', fontWeight: 'bold', fontSize: 14 },
-  ghostBtn: { background: 'none', color: T.muted, border: `1px solid ${T.bdr}`, padding: '10px 20px', borderRadius: 8, cursor: 'pointer' },
-  tabBar: { display: 'flex', gap: 8, marginBottom: 25, overflowX: 'auto', paddingBottom: 10 },
-  tabItem: (active: boolean) => ({
-    padding: '12px 20px', border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 13, whiteSpace: 'nowrap',
-    background: active ? T.blue : T.card, color: active ? '#fff' : T.muted, transition: '0.2s'
-  }),
+  tabBar: { display: 'flex', gap: 10, marginBottom: 25, overflowX: 'auto', paddingBottom: 10 },
+  tabItem: (active: boolean) => ({ padding: '12px 20px', border: 'none', borderRadius: 10, cursor: 'pointer', background: active ? T.blue : T.card, color: active ? '#fff' : T.muted, fontSize: 13, whiteSpace: 'nowrap' }),
   contentCard: { background: T.card, borderRadius: 16, border: `1px solid ${T.bdr}`, overflow: 'hidden' },
   table: { width: '100%', borderCollapse: 'collapse' },
-  thRow: { background: '#162030' },
-  th: { padding: '15px 20px', textAlign: 'left', color: T.muted, fontSize: 11, textTransform: 'uppercase', letterSpacing: 1 },
-  td: { padding: '18px 20px', color: T.txt, borderBottom: `1px solid ${T.bdr}`, fontSize: 14 },
-  tr: { transition: '0.2s', ':hover': { background: '#ffffff05' } },
-  actionBtn: { background: 'none', border: 'none', color: T.blue, marginLeft: 15, cursor: 'pointer', fontWeight: 'bold' },
+  thRow: { background: '#162030', textAlign: 'left', color: T.muted, fontSize: 11, textTransform: 'uppercase', height: 50 },
+  td: { padding: '15px 20px', color: T.txt, borderBottom: `1px solid ${T.bdr}`, fontSize: 14 },
+  tr: { ':hover': { background: '#ffffff05' } },
+  actionBtn: { background: 'none', border: 'none', color: T.blue, fontWeight: 'bold', cursor: 'pointer', marginLeft: 15 },
   modalOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 },
-  modalContent: { background: T.surf, padding: 35, borderRadius: 24, width: 400, border: `1px solid ${T.bdr}`, boxShadow: '0 20px 50px rgba(0,0,0,0.5)' },
+  modalContent: { background: T.surf, padding: 35, borderRadius: 24, width: 450, border: `1px solid ${T.bdr}` },
   label: { fontSize: 12, color: T.muted, marginBottom: 5, display: 'block' },
-  input: { width: '100%', padding: '12px 15px', background: T.bg, border: `1px solid ${T.bdr}`, color: '#fff', borderRadius: 10, boxSizing: 'border-box', outline: 'none' },
+  input: { width: '100%', padding: '12px', background: T.bg, border: `1px solid ${T.bdr}`, color: '#fff', borderRadius: 10, outline: 'none', boxSizing: 'border-box' },
   modalActions: { display: 'flex', justifyContent: 'flex-end', gap: 15, marginTop: 30 },
-  saveBtn: { background: T.teal, color: '#000', border: 'none', padding: '12px 25px', borderRadius: 10, fontWeight: 'bold', cursor: 'pointer' },
-  cancelBtn: { background: 'none', color: T.muted, border: 'none', cursor: 'pointer' }
+  saveBtn: { background: T.teal, color: '#000', border: 'none', padding: '12px 25px', borderRadius: 10, fontWeight: 'bold' },
+  cancelBtn: { background: 'none', color: T.muted, border: 'none' }
 };
