@@ -1,0 +1,15 @@
+/* src/index.css */
+body, html {
+  margin: 0;
+  padding: 0;
+  background-color: #06090f;
+  overflow-x: hidden;
+}
+
+#root {
+  width: 100%;
+}
+
+* {
+  box-sizing: border-box;
+}

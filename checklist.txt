@@ -1,0 +1,66 @@
+Chào bạn, để đảm bảo hệ thống **HAMS (Hospital Asset Management System)** của bạn vận hành trơn chu và đồng bộ hoàn toàn giữa giao diện, tính năng và database, đây là bản Checklist tổng thể cho giai đoạn hiện tại:
+
+---
+
+### 1. Checklist Giao diện (UI/UX)
+
+Mục tiêu: Đảm bảo tính thẩm mỹ đồng nhất theo phong cách "Dark Mode Pro" và trải nghiệm người dùng mượt mà.
+
+* [ ] **Hệ thống màu sắc (Theme):** Toàn bộ các Module phải dùng chung bộ mã màu $T.bg, T.surf, T.teal, T.blue$.
+* [ ] **Đồng bộ Sidebar:** Menu bên trái phải phản ánh đúng các View đang có (`DASHBOARD`, `ASSETS`, `MAINTENANCE`, `CATALOG`).
+* [ ] **Trạng thái Loading:** Hiển thị Spinner hoặc thông báo "Đang tải..." khi gọi API từ Supabase.
+* [ ] **Responsive:** Kiểm tra giao diện bảng trên màn hình nhỏ (có thanh cuộn ngang) và Form Modal trên Mobile.
+* [ ] **Feedback người dùng:** Các nút bấm "Lưu", "Xóa" phải có thông báo thành công/thất bại (Alert hoặc Toast).
+
+---
+
+### 2. Checklist Tính năng (Features)
+
+Mục tiêu: Đảm bảo các luồng nghiệp vụ (CRUD) và tiện ích hoạt động đúng logic.
+
+#### **A. Quản lý Tài sản (Asset Module)**
+
+* [ ] **Thêm/Sửa:** Form phải có đủ các trường: Tên, Mã, Serial, Model, Hãng SX, Khoa phòng.
+* [ ] **Chi tiết (Digital Twin):** Xem được lịch sử bảo trì, vòng đời và các tập tin đính kèm.
+* [ ] **QR Code:** Tự động tạo mã QR dựa trên ID thiết bị để dán nhãn.
+* [ ] **Upload:** Tải lên được ảnh thiết bị và file PDF hồ sơ máy.
+
+#### **B. Quản lý Danh mục (Catalog Module)**
+
+* [ ] **Đa danh mục:** Chuyển đổi linh hoạt giữa Khoa phòng, Hãng SX, Loại thiết bị, Quốc gia.
+* [ ] **CRUD nhanh:** Thêm/Sửa/Xóa danh mục trực tiếp không làm ảnh hưởng đến tính toàn vẹn dữ liệu (Foreign Key).
+* [ ] **Xuất Excel:** Xuất file `.xlsx` sạch, tiêu đề tiếng Việt cho từng loại danh mục.
+
+#### **C. Bảo trì (Maintenance Module)**
+
+* [ ] **Trạng thái:** Lọc được phiếu theo trạng thái: Đang chờ, Đang sửa, Hoàn thành.
+* [ ] **Cập nhật:** Kỹ thuật viên cập nhật được nội dung sửa chữa và chi phí phát sinh.
+
+---
+
+### 3. Checklist Cấu trúc & Database (System Architecture)
+
+Mục tiêu: Đảm bảo dữ liệu được tổ chức khoa học và bảo mật.
+
+* [ ] **Cấu trúc bảng (Schema):**
+* Bảng `TrangThietBi`: Chứa `khoaPhongId`, `hangSXId` (Foreign Keys).
+* Bảng `HoSoThietBi`: Liên kết chặt chẽ với `thietBiId`.
+* Bảng danh mục: `KhoaPhong`, `HangSanXuat`, `LoaiThietBi`.
+
+
+* [ ] **Làm phẳng dữ liệu (Data Flattening):** Khi fetch tài sản, phải dùng `.select('*, KhoaPhong(tenKhoaPhong)')` để tránh hiển thị ID vô nghĩa.
+* [ ] **Bảo mật (RLS):** Thiết lập Policy trên Supabase để chỉ Admin mới có quyền Xóa (Delete).
+* [ ] **Storage:** Folder `documents` và `images` trên Supabase Storage phải được cấu hình quyền truy cập (Public/Authenticated).
+* [ ] **Helper Utils:** File `excelService.ts` phải hoạt động độc lập để mọi Module có thể gọi.
+
+---
+
+### 4. Checklist Đồng bộ (Final Sync)
+
+* [ ] **Handle Error:** Đã xóa toàn bộ các hàm trùng tên (như lỗi `handleSave` bạn gặp phải).
+* [ ] **Mapping:** Tên cột trong Code (`colName`, `colCode`) phải khớp 100% với tên cột trong Supabase Table.
+* [ ] **Cleaning:** Xóa bỏ các đoạn code dư thừa (Seed data giả) sau khi đã kết nối dữ liệu thật.
+
+---
+
+**Bạn có muốn tôi đi sâu vào chi tiết cách thiết lập "Policy" trên Supabase để bảo vệ dữ liệu cho từng module không?**
