@@ -1,130 +1,155 @@
 import { useMemo } from 'react';
-import { supabase } from '../lib/supabaseClient';
+import { 
+  Monitor, 
+  Activity, 
+  Wrench, 
+  AlertCircle, 
+  TrendingUp, 
+  CheckCircle2,
+  PieChart,
+  History,
+  ShieldCheck
+} from 'lucide-react';
 
-export const ModuleDashboard = ({ assets = [], pendingUsers = [], onRefresh, theme }: any) => {
+export const ModuleDashboard = ({ assets = [], theme, isMobile }: any) => {
   
   const d = useMemo(() => {
-    const total = assets.length;
-    const totalVal = assets.reduce((sum: number, a: any) => sum + (Number(a.nguyenGia) || 0), 0);
+    const total = assets.length || 1;
     const active = assets.filter((a: any) => a.trangThai === 'ACTIVE').length;
     const maint = assets.filter((a: any) => a.trangThai === 'MAINTENANCE').length;
     const broken = assets.filter((a: any) => a.trangThai === 'BROKEN').length;
-    const usageRate = total > 0 ? Math.round((active / total) * 100) : 0;
-
-    const deptMap: any = {};
-    assets.forEach((a: any) => {
-      const dept = a.KhoaPhong?.tenKhoaPhong || "Chưa phân khoa";
-      deptMap[dept] = (deptMap[dept] || 0) + 1;
-    });
     
-    const deptData = Object.keys(deptMap).map(name => ({
-      name, count: deptMap[name],
-      percent: total > 0 ? Math.round((deptMap[name] / total) * 100) : 0
-    })).sort((a,b) => b.count - a.count).slice(0, 5);
+    // Tỷ lệ sức khỏe thiết bị
+    const activePercent = Math.round((active / total) * 100);
+    const brokenPercent = Math.round((broken / total) * 100);
 
-    const alerts = assets
-      .filter((a: any) => a.trangThai === 'BROKEN' || a.trangThai === 'MAINTENANCE')
-      .slice(0, 4)
-      .map((a: any) => ({
-        type: a.trangThai === 'BROKEN' ? 'Sự cố' : 'Bảo trì',
-        name: a.tenThietBi,
-        color: a.trangThai === 'BROKEN' ? '#ef4444' : '#f59e0b'
-      }));
-
-    return { total, totalVal, active, maint, broken, usageRate, deptData, alerts };
+    return { total, active, maint, broken, activePercent, brokenPercent };
   }, [assets]);
 
-  const handleUserAction = async (userId: string, action: 'APPROVE' | 'REJECT') => {
-    try {
-      if (action === 'APPROVE') {
-        await supabase.from('Users').update({ status: 'ACTIVE' }).eq('id', userId);
-        alert("Đã duyệt nhân sự!");
-      } else {
-        await supabase.from('Users').delete().eq('id', userId);
-        alert("Đã từ chối!");
-      }
-      onRefresh();
-    } catch (e: any) { alert(e.message); }
-  };
-
   return (
-    <div style={{ padding: '10px 0' }}>
-      <div style={{ marginBottom: 25, fontSize: 13, color: theme.muted }}>🏠 Trang chủ → <span style={{ color: '#3b82f6' }}>Dashboard</span></div>
-
-      {/* STATS GRID */}
-      <div style={css.statsGrid}>
-        <StatCard label="Tổng tài sản" val={d.total} color="#3b82f6" theme={theme} />
-        <StatCard label="Tổng giá trị" val={(d.totalVal / 1000000000).toFixed(1) + ' tỷ'} color="#00d4a8" theme={theme} />
-        <StatCard label="Sự cố/Bảo trì" val={d.broken + d.maint} color="#ef4444" theme={theme} />
-        <StatCard label="Tỷ lệ sử dụng" val={d.usageRate + '%'} color="#a855f7" theme={theme} />
+    <div style={{ color: theme.text }}>
+      {/* HEADER TỐI GIẢN */}
+      <div style={{ marginBottom: '2.5rem' }}>
+        <h2 style={{ margin: 0, fontWeight: 800, fontSize: isMobile ? '1.5rem' : '2.2rem' }}>Tổng quan vận hành</h2>
+        <p style={{ color: theme.textMuted, marginTop: '0.5rem' }}>Chào buổi sáng! Hệ thống đang quản lý <b>{d.total}</b> thiết bị y tế.</p>
       </div>
 
-      {/* PHÊ DUYỆT NHÂN SỰ */}
-      {pendingUsers.length > 0 && (
-        <div style={{ ...css.panel, background: theme.card, border: `1px solid ${theme.border}`, marginBottom: 25 }}>
-          <div style={{ fontWeight: 'bold', color: '#a855f7', marginBottom: 15 }}>👥 Yêu cầu phê duyệt ({pendingUsers.length})</div>
-          <div style={css.userList}>
-            {pendingUsers.map((u: any) => (
-              <div key={u.id} style={css.userRow}>
-                <div>
-                    <div style={{fontWeight: 'bold'}}>{u.fullName}</div>
-                    <div style={{fontSize: 11, color: theme.muted}}>{u.username}</div>
-                </div>
-                <div style={{display: 'flex', gap: 10}}>
-                    <button onClick={() => handleUserAction(u.id, 'APPROVE')} style={css.approveBtn}>Duyệt</button>
-                    <button onClick={() => handleUserAction(u.id, 'REJECT')} style={css.rejectBtn}>Xoá</button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* WIDGET CARDS GRID */}
+      <div style={s.statsGrid(isMobile)}>
+        <WidgetCard label="TỔNG THIẾT BỊ" val={d.total} color={theme.primary} icon={<Monitor size={24}/>} theme={theme} />
+        <WidgetCard label="ĐANG HOẠT ĐỘNG" val={d.active} color={theme.secondary} icon={<CheckCircle2 size={24}/>} theme={theme} />
+        <WidgetCard label="CẦN BẢO TRÌ" val={d.maint} color={theme.warning} icon={<Wrench size={24}/>} theme={theme} />
+        <WidgetCard label="ĐANG SỰ CỐ" val={d.broken} color={theme.danger} icon={<AlertCircle size={24}/>} theme={theme} />
+      </div>
 
-      {/* CHARTS & ALERTS */}
-      <div style={css.mainGrid}>
-        <div style={{ ...css.panel, background: theme.card, border: `1px solid ${theme.border}` }}>
-          <div style={{ fontWeight: 'bold', marginBottom: 20 }}>📊 Phân bổ theo Khoa</div>
-          {d.deptData.map((dept, i) => (
-            <div key={i} style={{marginBottom: 15}}>
-              <div style={{display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 5}}>
-                <span>{dept.name}</span>
-                <span style={{fontWeight: 'bold'}}>{dept.percent}%</span>
-              </div>
-              <div style={{height: 6, background: '#00000020', borderRadius: 10, overflow: 'hidden'}}>
-                <div style={{height: '100%', width: `${dept.percent}%`, background: '#3b82f6'}} />
-              </div>
+      {/* DATA VISUALIZATION SECTION */}
+      <div style={s.mainGrid(isMobile)}>
+        
+        {/* DONUT CHART SIMULATION (SOFT UI STYLE) */}
+        <div className="glass-card" style={{ padding: '2rem', background: theme.card, borderRadius: '24px', border: `1px solid ${theme.border}` }}>
+            <div style={{ display:'flex', alignItems:'center', gap: 10, marginBottom: '2rem' }}>
+                <PieChart size={20} color={theme.primary} />
+                <b style={{ fontSize: '1rem', color: theme.text }}>Tỷ lệ sức khỏe hệ thống</b>
             </div>
-          ))}
+            <div style={s.donutWrapper}>
+                <div style={s.donut(d.activePercent, theme.secondary, theme.bg)}>
+                    <div style={{...s.donutInner, background: theme.card}}>
+                        <div style={{fontSize: '2rem', fontWeight: 800, color: theme.text}}>{d.activePercent}%</div>
+                        <div style={{fontSize: '0.7rem', color: theme.textMuted}}>HOẠT ĐỘNG TỐT</div>
+                    </div>
+                </div>
+            </div>
+            <div style={{ marginTop: '2rem', display:'flex', justifyContent:'space-around' }}>
+                <LegendItem label="Sẵn sàng" color={theme.secondary} theme={theme} />
+                <LegendItem label="Sự cố" color={theme.danger} theme={theme} />
+                <LegendItem label="Bảo trì" color={theme.warning} theme={theme} />
+            </div>
         </div>
 
-        <div style={{ ...css.panel, background: theme.card, border: `1px solid ${theme.border}` }}>
-          <div style={{ fontWeight: 'bold', marginBottom: 20 }}>🔔 Cảnh báo vận hành</div>
-          {d.alerts.map((a, i) => (
-            <div key={i} style={{padding: 12, background: '#00000010', borderRadius: 10, marginBottom: 10, borderLeft: `4px solid ${a.color}`}}>
-              <div style={{fontSize: 11, color: a.color, fontWeight: 'bold'}}>{a.type}</div>
-              <div style={{fontSize: 13, fontWeight: 'bold', marginTop: 3}}>{a.name}</div>
+        {/* TIMELINE - CÁC CA KỸ THUẬT GẦN ĐÂY */}
+        <div className="glass-card" style={{ padding: '2rem', background: theme.card, borderRadius: '24px', border: `1px solid ${theme.border}` }}>
+            <div style={{ display:'flex', alignItems:'center', gap: 10, marginBottom: '2rem' }}>
+                <Activity size={20} color={theme.primary} />
+                <b style={{ fontSize: '1rem', color: theme.text }}>Dải thời gian kỹ thuật (Hôm nay)</b>
             </div>
-          ))}
-          {d.alerts.length === 0 && <p style={{textAlign: 'center', color: theme.muted}}>Hệ thống an toàn ✅</p>}
+            <div style={{ display:'flex', flexDirection:'column', gap: '1.5rem' }}>
+                <TimelineItem time="08:30" title="Kiểm định máy X-Quang" loc="Khoa CĐHA" color={theme.primary} theme={theme} />
+                <TimelineItem time="10:15" title="Sửa lỗi nguồn Monitor" loc="Khoa HSCC" color={theme.danger} theme={theme} />
+                <TimelineItem time="14:00" title="Bảo trì hệ thống Oxy" loc="Toà nhà A" color={theme.warning} theme={theme} />
+                <TimelineItem time="16:45" title="Bàn giao máy Siêu âm" loc="Khoa Sản" color={theme.secondary} theme={theme} />
+            </div>
         </div>
+
+        {/* SYSTEM AUDIT LOG */}
+        <div className="glass-card" style={{ gridColumn: isMobile ? 'span 1' : 'span 2', padding: '2rem', background: theme.card, borderRadius: '24px', border: `1px solid ${theme.border}` }}>
+            <div style={{ display:'flex', alignItems:'center', gap: 10, marginBottom: '2rem' }}>
+                <ShieldCheck size={20} color={theme.primary} />
+                <b style={{ fontSize: '1rem', color: theme.text }}>Nhật ký kiểm toán hệ thống</b>
+            </div>
+            <div style={{ display:'flex', flexDirection:'column', gap: '1rem' }}>
+                <AuditItem user="admin" action="Cập nhật thông tin TS-001" time="2 phút trước" theme={theme} />
+                <AuditItem user="kythuat_01" action="Bắt đầu xử lý sự cố SC-102" time="15 phút trước" theme={theme} />
+                <AuditItem user="bs_lan" action="Báo hỏng máy Monitor M-02" time="1 giờ trước" theme={theme} />
+                <AuditItem user="admin" action="Thêm mới người dùng: bs_minh" time="3 giờ trước" theme={theme} />
+            </div>
+        </div>
+
       </div>
     </div>
   );
 };
 
-const StatCard = ({ label, val, color, theme }: any) => (
-  <div style={{ background: theme.card, padding: 20, borderRadius: 16, border: `1px solid ${theme.border}`, borderLeft: `4px solid ${color}` }}>
-    <div style={{ fontSize: 11, color: theme.muted, marginBottom: 5 }}>{label}</div>
-    <div style={{ fontSize: 20, fontWeight: 'bold', color: theme.text }}>{val}</div>
-  </div>
+// --- SUB-COMPONENTS ---
+const WidgetCard = ({ label, val, color, icon, theme }: any) => (
+    <div className="glass-card" style={{ padding: '1.5rem', background: theme.card, borderRadius: '20px', display:'flex', alignItems:'center', gap: '1.25rem', border: `1px solid ${theme.border}` }}>
+        <div style={{ width: 50, height: 50, background: `${color}10`, color: color, borderRadius: '15px', display:'flex', justifyContent:'center', alignItems:'center' }}>
+            {icon}
+        </div>
+        <div>
+            <div style={{ fontSize: '0.7rem', color: theme.textMuted, fontWeight: 800, letterSpacing: 0.5, marginBottom: 4 }}>{label}</div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: theme.text }}>{val}</div>
+        </div>
+    </div>
 );
 
-const css: any = {
-  statsGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 15, marginBottom: 25 },
-  mainGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 20 },
-  panel: { padding: 20, borderRadius: 20 },
-  userList: { display: 'flex', flexDirection: 'column', gap: 10 },
-  userRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 15px', background: '#00000010', borderRadius: 12 },
-  approveBtn: { background: '#00d4a8', color: '#000', border: 'none', padding: '6px 15px', borderRadius: 8, fontWeight: 'bold', cursor: 'pointer', fontSize: 12 },
-  rejectBtn: { background: 'none', border: '1px solid #ef4444', color: '#ef4444', padding: '6px 15px', borderRadius: 8, cursor: 'pointer', fontSize: 12 }
+const LegendItem = ({ label, color, theme }: any) => (
+    <div style={{ display:'flex', alignItems:'center', gap: 8, fontSize: '0.8rem', fontWeight: 600, color: theme.text }}>
+        <div style={{ width: 8, height: 8, borderRadius: '50%', background: color }} />
+        <span>{label}</span>
+    </div>
+);
+
+const TimelineItem = ({ time, title, loc, color, theme }: any) => (
+    <div style={{ display:'flex', gap: '1.5rem' }}>
+        <div style={{ fontSize: '0.8rem', fontWeight: 800, color: theme.textMuted, width: 40 }}>{time}</div>
+        <div style={{ borderLeft: `3px solid ${color}`, paddingLeft: '1.25rem', position:'relative' }}>
+            <div style={{ position:'absolute', left: -6, top: 0, width: 9, height: 9, borderRadius:'50%', background: color }} />
+            <div style={{ fontSize: '0.9rem', fontWeight: 700, color: theme.text }}>{title}</div>
+            <div style={{ fontSize: '0.75rem', color: theme.textMuted, marginTop: 2 }}>📍 {loc}</div>
+        </div>
+    </div>
+);
+
+const AuditItem = ({ user, action, time, theme }: any) => (
+    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', paddingBottom:'1rem', borderBottom:`1px solid ${theme.border}` }}>
+        <div style={{ display:'flex', alignItems:'center', gap: 12 }}>
+            <div style={{ width: 32, height: 32, borderRadius:'50%', background: theme.primary+'20', color: theme.primary, display:'flex', justifyContent:'center', alignItems:'center', fontSize:'0.8rem', fontWeight: 800 }}>{user.charAt(0).toUpperCase()}</div>
+            <div>
+                <div style={{ fontSize:'0.9rem', fontWeight: 700, color: theme.text }}>{user} <span style={{ fontWeight: 400, color: theme.textMuted }}>{action}</span></div>
+            </div>
+        </div>
+        <div style={{ fontSize:'0.75rem', color: theme.textMuted }}>{time}</div>
+    </div>
+);
+
+const s: any = {
+  statsGrid: (isMob: boolean) => ({ display: 'grid', gridTemplateColumns: isMob ? '1fr 1fr' : 'repeat(4, 1fr)', gap: '1.5rem', marginBottom: '2.5rem' }),
+  mainGrid: (isMob: boolean) => ({ display: 'grid', gridTemplateColumns: isMob ? '1fr' : '1fr 1.5fr', gap: '2.5rem' }),
+  donutWrapper: { display:'flex', justifyContent:'center', alignItems:'center', height: 200 },
+  donut: (percent: number, color: string, bg: string) => ({
+    width: 180, height: 180, borderRadius: '50%',
+    background: `conic-gradient(${color} ${percent * 3.6}deg, ${bg} 0deg)`,
+    display:'flex', justifyContent:'center', alignItems:'center', position:'relative'
+  }),
+  donutInner: { width: 140, height: 140, borderRadius: '50%', display:'flex', flexDirection:'column', justifyContent:'center', alignItems:'center', boxShadow: 'inset 0 4px 10px rgba(0,0,0,0.05)' }
 };

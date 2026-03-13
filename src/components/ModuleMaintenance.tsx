@@ -1,23 +1,32 @@
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "../lib/supabaseClient";
+import { 
+  Wrench, 
+  Clock, 
+  CheckCircle2, 
+  AlertCircle, 
+  ChevronRight,
+  User,
+  MapPin,
+  Calendar
+} from 'lucide-react';
 
-export const ModuleMaintenance = () => {
+export const ModuleMaintenance = ({ theme, isMobile }: any) => {
   const [tickets, setTickets] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<any>(null);
-  const [updateData, setUpdateData] = useState({
-    noiDungChiTiet: '',
-    chiPhi: 0,
-    nguoiThucHien: '',
-    ketQua: 'SUCCESS'
+  const [filterStatus, setFilterStatus] = useState('ALL');
+  const [updateData, setUpdateData] = useState({ 
+    noiDungChiTiet: '', 
+    chiPhi: 0, 
+    nguoiThucHien: '', 
+    ketQua: 'SUCCESS',
+    newStatus: 'DONE'
   });
 
   const fetchTickets = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase
-      .from('LichBaoTri')
-      .select('*, TrangThietBi(tenThietBi, maTaiSan, KhoaPhong(tenKhoaPhong))')
-      .order('ngayDuKien', { ascending: true });
+    const { data } = await supabase.from('LichBaoTri').select('*, TrangThietBi(tenThietBi, maTaiSan, KhoaPhong(tenKhoaPhong))').order('ngayDuKien', { ascending: true });
     setTickets(data || []);
     setLoading(false);
   }, []);
@@ -26,115 +35,136 @@ export const ModuleMaintenance = () => {
 
   const handleUpdate = async () => {
     try {
-      // 1. Cập nhật trạng thái lịch bảo trì
       await supabase.from('LichBaoTri').update({ 
-        trangThai: 'DONE',
-        noiDung: updateData.noiDungChiTiet
+          trangThai: updateData.newStatus, 
+          noiDung: updateData.noiDungChiTiet 
       }).eq('id', selectedTicket.id);
+      
+      if (updateData.newStatus === 'DONE') {
+          await supabase.from('SuaChuaChiTiet').insert([{
+            trangThietBiId: selectedTicket.trangThietBiId, 
+            noiDungChiTiet: updateData.noiDungChiTiet,
+            chiPhi: updateData.chiPhi, 
+            nguoiThucHien: updateData.nguoiThucHien, 
+            ketQua: updateData.ketQua
+          }]);
+          await supabase.from('TrangThietBi').update({ trangThai: 'ACTIVE' }).eq('id', selectedTicket.trangThietBiId);
+      } else if (updateData.newStatus === 'PROCESSING') {
+          await supabase.from('TrangThietBi').update({ trangThai: 'BROKEN' }).eq('id', selectedTicket.trangThietBiId);
+      }
 
-      // 2. Thêm vào lịch sử sửa chữa chi tiết
-      await supabase.from('SuaChuaChiTiet').insert([{
-        trangThietBiId: selectedTicket.trangThietBiId,
-        noiDungChiTiet: updateData.noiDungChiTiet,
-        chiPhi: updateData.chiPhi,
-        nguoiThucHien: updateData.nguoiThucHien,
-        ketQua: updateData.ketQua
-      }]);
-
-      // 3. Cập nhật trạng thái thiết bị sang ACTIVE
-      await supabase.from('TrangThietBi').update({ trangThai: 'ACTIVE' }).eq('id', selectedTicket.trangThietBiId);
-
-      alert("Đã cập nhật tiến độ bảo trì thành công!");
-      setSelectedTicket(null);
-      fetchTickets();
+      alert("Cập nhật thành công!"); setSelectedTicket(null); fetchTickets();
     } catch (e: any) { alert(e.message); }
   };
 
+  const filteredTickets = tickets.filter(t => filterStatus === 'ALL' || t.trangThai === filterStatus);
+
   return (
-    <div style={css.container}>
-      <div style={css.header}>
-        <h1 style={{margin: 0}}>🔧 Điều phối Bảo trì & Sửa chữa</h1>
-        <p style={{color: '#64748b', marginTop: 5}}>Quản lý danh sách các phiếu yêu cầu kỹ thuật</p>
+    <div style={{...s.container, background: theme.bg, color: theme.text}}>
+      <div style={s.header}>
+        <div style={{flex: 1}}>
+            <h1 style={{margin: 0, fontWeight: 800, fontSize: isMobile ? '1.5rem' : '2rem', color: theme.text}}>🔧 Điều phối kỹ thuật</h1>
+            <p style={{color: theme.textMuted, marginTop: '0.5rem'}}>Quản lý và cập nhật tiến độ bảo trì thiết bị y tế</p>
+        </div>
+        
+        <div style={{display:'flex', gap: 10, marginTop: isMobile ? '1rem' : 0}}>
+            <FilterBtn label="Tất cả" active={filterStatus==='ALL'} onClick={()=>setFilterStatus('ALL')} theme={theme} />
+            <FilterBtn label="Đang chờ" active={filterStatus==='PENDING'} onClick={()=>setFilterStatus('PENDING')} theme={theme} />
+            <FilterBtn label="Đang sửa" active={filterStatus==='PROCESSING'} onClick={()=>setFilterStatus('PROCESSING')} theme={theme} />
+            <FilterBtn label="Hoàn thành" active={filterStatus==='DONE'} onClick={()=>setFilterStatus('DONE')} theme={theme} />
+        </div>
       </div>
 
-      <div style={css.grid}>
-        {tickets.map(t => (
-          <div key={t.id} style={css.card}>
-            <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: 15}}>
-                <span style={css.dateTag}>{new Date(t.ngayDuKien).toLocaleDateString('vi-VN')}</span>
-                <span style={css.statusBadge(t.trangThai)}>{t.trangThai}</span>
-            </div>
-            <h3 style={{margin: '0 0 5px 0', color: '#fff'}}>{t.TrangThietBi?.tenThietBi}</h3>
-            <div style={{fontSize: 12, color: '#3b82f6', fontWeight: 'bold', marginBottom: 10}}>{t.TrangThietBi?.maTaiSan}</div>
-            <div style={{fontSize: 13, color: '#94a3b8'}}>📍 {t.TrangThietBi?.KhoaPhong?.tenKhoaPhong}</div>
-            <div style={{fontSize: 13, color: '#e2e8f0', marginTop: 10, background: '#06090f', padding: 10, borderRadius: 8}}>
-                💬 {t.noiDung || 'Bảo trì định kỳ'}
+      <div style={s.grid(isMobile)}>
+        {filteredTickets.map(t => (
+          <div key={t.id} className="glass-card" style={{padding: '1.5rem', background: theme.card, border: `1px solid ${theme.border}`, borderRadius: '20px'}}>
+            <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem'}}>
+                <div style={s.statusBadge(t.trangThai, theme)}>
+                    {t.trangThai === 'DONE' ? <CheckCircle2 size={14}/> : <Clock size={14}/>}
+                    {t.trangThai === 'PENDING' ? 'Đang chờ' : (t.trangThai === 'PROCESSING' ? 'Đang sửa' : 'Hoàn thành')}
+                </div>
+                <div style={{fontSize: '0.8rem', color: theme.textMuted, display:'flex', alignItems:'center', gap: 5}}>
+                    <Calendar size={12}/> {new Date(t.ngayDuKien).toLocaleDateString('vi-VN')}
+                </div>
             </div>
             
-            {t.trangThai === 'PENDING' && (
-                <button onClick={() => setSelectedTicket(t)} style={css.actionBtn}>Cập nhật tiến độ</button>
+            <h3 style={{margin: '0 0 0.5rem 0', fontWeight: 700, color: theme.text}}>{t.TrangThietBi?.tenThietBi}</h3>
+            <div style={{color: theme.primary, fontWeight: 800, fontSize: '0.85rem', marginBottom: '1rem'}}>{t.TrangThietBi?.maTaiSan}</div>
+            
+            <div style={{display:'flex', flexDirection:'column', gap: '0.5rem', fontSize: '0.85rem', color: theme.textMuted}}>
+                <div style={{display:'flex', alignItems:'center', gap: 8}}><MapPin size={14}/> {t.TrangThietBi?.KhoaPhong?.tenKhoaPhong}</div>
+                <div style={{display:'flex', alignItems:'center', gap: 8, color: theme.text}}><AlertCircle size={14}/> {t.noiDung || 'Bảo trì định kỳ'}</div>
+            </div>
+
+            {t.trangThai !== 'DONE' && (
+                <button onClick={() => {
+                    setUpdateData({ 
+                        noiDungChiTiet: t.noiDung || '', 
+                        chiPhi: 0, 
+                        nguoiThucHien: '', 
+                        ketQua: 'SUCCESS',
+                        newStatus: t.trangThai === 'PENDING' ? 'PROCESSING' : 'DONE'
+                    });
+                    setSelectedTicket(t);
+                }} className="cta-button" style={{width:'100%', marginTop: '1.5rem', background: theme.primary, color: '#fff', padding: '0.75rem', borderRadius: '0.75rem', border: 'none', fontWeight: 700, cursor:'pointer'}}>
+                    Cập nhật tiến độ <ChevronRight size={16}/>
+                </button>
             )}
           </div>
         ))}
       </div>
 
       {selectedTicket && (
-        <div style={css.modalOverlay}>
-          <div style={css.modalContent}>
-            <h3>📝 Cập nhật kết quả xử lý</h3>
-            <p style={{fontSize: 13, color: '#94a3b8'}}>{selectedTicket.TrangThietBi?.tenThietBi}</p>
-            
-            <div style={{display: 'flex', flexDirection: 'column', gap: 15, marginTop: 20}}>
+        <div style={s.overlay}><div style={{...s.modal, background: theme.card, border: `1px solid ${theme.border}`}}>
+            <h3 style={{marginTop: 0, fontWeight: 800, color: theme.text}}>📝 Cập nhật xử lý</h3>
+            <div style={{display:'flex', flexDirection:'column', gap: '1.25rem', marginTop: '1.5rem'}}>
                 <div>
-                    <label style={css.label}>Nội dung đã thực hiện</label>
-                    <textarea style={css.input} rows={3} onChange={e => setUpdateData({...updateData, noiDungChiTiet: e.target.value})} />
+                    <label style={{...s.label, color: theme.textMuted}}>Trạng thái mới</label>
+                    <select style={{...s.input, background: theme.bg, color: theme.text, borderColor: theme.border}} value={updateData.newStatus} onChange={e=>setUpdateData({...updateData, newStatus: e.target.value})}>
+                        <option value="PROCESSING">Đang sửa chữa (Processing)</option>
+                        <option value="DONE">Đã hoàn thành (Done)</option>
+                    </select>
                 </div>
-                <div>
-                    <label style={css.label}>Người thực hiện / Đơn vị</label>
-                    <input style={css.input} onChange={e => setUpdateData({...updateData, nguoiThucHien: e.target.value})} />
-                </div>
-                <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 15}}>
-                    <div>
-                        <label style={css.label}>Chi phí phát sinh (đ)</label>
-                        <input type="number" style={css.input} onChange={e => setUpdateData({...updateData, chiPhi: Number(e.target.value)})} />
-                    </div>
-                    <div>
-                        <label style={css.label}>Kết quả</label>
-                        <select style={css.input} onChange={e => setUpdateData({...updateData, ketQua: e.target.value})}>
-                            <option value="SUCCESS">Thành công / Hoạt động tốt</option>
-                            <option value="PARTIAL">Hoạt động tạm thời</option>
-                            <option value="FAILED">Thất bại / Chờ linh kiện</option>
+
+                <textarea style={{...s.input, background: theme.bg, color: theme.text, border: `1px solid ${theme.border}`}} rows={3} placeholder="Nội dung công việc..." value={updateData.noiDungChiTiet} onChange={e=>setUpdateData({...updateData, noiDungChiTiet: e.target.value})} />
+                
+                <input style={{...s.input, background: theme.bg, color: theme.text, border: `1px solid ${theme.border}`}} placeholder="Người thực hiện" value={updateData.nguoiThucHien} onChange={e=>setUpdateData({...updateData, nguoiThucHien: e.target.value})} />
+                
+                {updateData.newStatus === 'DONE' && (
+                    <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap: '1rem'}}>
+                        <input type="number" style={{...s.input, background: theme.bg, color: theme.text, border: `1px solid ${theme.border}`}} placeholder="Chi phí (VNĐ)" value={updateData.chiPhi} onChange={e=>setUpdateData({...updateData, chiPhi: Number(e.target.value)})} />
+                        <select style={{...s.input, background: theme.bg, color: theme.text, border: `1px solid ${theme.border}`}} value={updateData.ketQua} onChange={e=>setUpdateData({...updateData, ketQua: e.target.value})}>
+                            <option value="SUCCESS">Thành công</option><option value="FAILED">Chờ linh kiện</option>
                         </select>
                     </div>
-                </div>
+                )}
             </div>
-
-            <div style={{marginTop: 30, textAlign: 'right'}}>
-                <button onClick={() => setSelectedTicket(null)} style={{background: 'none', border: 'none', color: '#64748b', marginRight: 20}}>Huỷ</button>
-                <button onClick={handleUpdate} style={css.saveBtn}>Xác nhận hoàn thành</button>
+            <div style={{marginTop: '2rem', display:'flex', justifyContent:'flex-end', gap: '1rem'}}>
+                <button onClick={()=>setSelectedTicket(null)} style={{...s.cancelBtn, color: theme.textMuted}}>Hủy</button>
+                <button onClick={handleUpdate} style={{...s.addBtn, background: theme.secondary}}>Lưu cập nhật</button>
             </div>
-          </div>
-        </div>
+        </div></div>
       )}
     </div>
   );
 };
 
-const css: any = {
-  container: { padding: '20px' },
-  header: { marginBottom: 30 },
-  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 20 },
-  card: { background: '#111d2e', padding: 25, borderRadius: 20, border: '1px solid #1a2840' },
-  dateTag: { background: '#3b82f620', color: '#3b82f6', padding: '4px 12px', borderRadius: 6, fontSize: 11, fontWeight: 'bold' },
-  statusBadge: (s: string) => ({
-    background: s === 'DONE' ? '#22c55e20' : '#f59e0b20',
-    color: s === 'DONE' ? '#22c55e' : '#f59e0b',
-    padding: '4px 12px', borderRadius: 6, fontSize: 11, fontWeight: 'bold'
-  }),
-  actionBtn: { width: '100%', marginTop: 20, background: '#00d4a8', color: '#000', border: 'none', padding: '12px', borderRadius: 10, fontWeight: 'bold', cursor: 'pointer' },
-  modalOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 },
-  modalContent: { background: '#0d1520', padding: 35, borderRadius: 24, width: 500, border: '1px solid #1a2840' },
-  label: { fontSize: 12, color: '#64748b', marginBottom: 5, display: 'block' },
-  input: { width: '100%', padding: '12px', background: '#111d2e', border: '1px solid #1a2840', color: '#fff', borderRadius: 10, outline: 'none', boxSizing: 'border-box' },
-  saveBtn: { background: '#00d4a8', color: '#000', border: 'none', padding: '12px 25px', borderRadius: 10, fontWeight: 'bold' }
+const FilterBtn = ({ label, active, onClick, theme }: any) => (
+    <button onClick={onClick} style={{
+        padding: '0.5rem 1rem', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 700,
+        background: active ? theme.primary : 'transparent', color: active ? '#fff' : theme.textMuted
+    }}>{label}</button>
+);
+
+const s: any = {
+  container: { padding: '1.5rem', minHeight: '100vh' },
+  header: { marginBottom: '2.5rem', display:'flex', justifyContent:'space-between', alignItems:'flex-start', flexWrap:'wrap' },
+  grid: (isMobile: boolean) => ({ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(350px, 1fr))', gap: '1.5rem' }),
+  statusBadge: (st: string, t: any) => ({ display:'flex', alignItems:'center', gap: 5, background: st === 'DONE' ? t.secondary+'15' : t.warning+'15', color: st === 'DONE' ? t.secondary : t.warning, padding: '0.4rem 0.8rem', borderRadius: '0.5rem', fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase' }),
+  overlay: { position:'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)', display:'flex', justifyContent:'center', alignItems:'center', zIndex: 4000, padding: '2rem' },
+  modal: { padding: '2.5rem', borderRadius: '1.5rem', width: '100%', maxWidth: '500px' },
+  input: { padding: '1rem', borderRadius: '0.75rem', outline: 'none', width: '100%', boxSizing: 'border-box' },
+  cancelBtn: { background: 'none', border: 'none', cursor: 'pointer', fontWeight: 700 },
+  addBtn: { border: 'none', padding: '0.8rem 1.5rem', borderRadius: '0.75rem', color: '#fff', fontWeight: 700, cursor: 'pointer' },
+  label: { fontSize: '0.85rem', fontWeight: 700, display:'block', marginBottom: 5 }
 };
