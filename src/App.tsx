@@ -124,6 +124,24 @@ export default function App() {
     if (session) fetchAllData(); 
   }, [session, fetchAllData]);
 
+  if (!isConfigured) {
+    return (
+      <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', background: '#F8FAFC', padding: '2rem', textAlign: 'center', fontFamily: 'sans-serif' }}>
+        <div style={{ background: '#fff', padding: '3rem', borderRadius: '24px', boxShadow: '0 20px 50px rgba(0,0,0,0.1)', maxWidth: '500px' }}>
+          <AlertTriangle size={64} color="#EF4444" style={{ marginBottom: '1.5rem' }} />
+          <h2 style={{ margin: '0 0 1rem 0', color: '#1E293B' }}>Thiếu cấu hình hệ thống</h2>
+          <p style={{ color: '#64748B', lineHeight: '1.6', marginBottom: '2rem', fontSize: '0.9rem' }}>
+            Ứng dụng HAMS PRO chưa được kết nối với cơ sở dữ liệu Supabase. 
+            Vui lòng thiết lập <b>VITE_SUPABASE_URL</b> và <b>VITE_SUPABASE_ANON_KEY</b> trong bảng điều khiển Vercel.
+          </p>
+          <a href="https://vercel.com" target="_blank" rel="noreferrer" style={{ display: 'inline-block', background: '#2563EB', color: '#fff', padding: '12px 24px', borderRadius: '12px', textDecoration: 'none', fontWeight: 700 }}>
+            Đi tới Vercel Dashboard
+          </a>
+        </div>
+      </div>
+    );
+  }
+
   if (!session) return <ModuleLogin onLoginSuccess={setSession} theme={theme} />;
   
   if (isLoading && assets.length === 0) return <LoadingSpinner theme={theme} />;
