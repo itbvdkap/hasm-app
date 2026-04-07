@@ -16,7 +16,6 @@ import {
   AlertTriangle
 } from 'lucide-react';
 
-// --- IMPORT MODULES ---
 import { ModuleDashboard } from './components/ModuleDashboard';
 import { ModuleAssetList } from './components/ModuleAssetList';
 import { ModuleAssetDetail } from './components/ModuleAssetDetail';
@@ -128,7 +127,7 @@ export default function App() {
           <h2 style={{ margin: '0 0 1rem 0', color: '#1E293B' }}>Thiếu cấu hình hệ thống</h2>
           <p style={{ color: '#64748B', lineHeight: '1.6', marginBottom: '2rem', fontSize: '0.9rem' }}>
             Ứng dụng HAMS PRO chưa được kết nối với cơ sở dữ liệu Supabase. 
-            Vui lòng thiết lập <b>VITE_SUPABASE_URL</b> và <b>VITE_SUPABASE_ANON_KEY</b> trong bảng điều khiển Vercel.
+            Vui lòng thiết lập biến môi trường trong tệp <b>.env</b> (Local) hoặc trên Vercel Dashboard.
           </p>
           <a href="https://vercel.com" target="_blank" rel="noreferrer" style={{ display: 'inline-block', background: '#2563EB', color: '#fff', padding: '12px 24px', borderRadius: '12px', textDecoration: 'none', fontWeight: 700 }}>
             Đi tới Vercel Dashboard
@@ -144,7 +143,6 @@ export default function App() {
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: theme.bg, color: theme.text, fontFamily: "'Inter', sans-serif" }}>
-      
       {!isMobile && (
         <aside style={{...ui.sidebar, background: theme.sidebar, borderRight: `1px solid ${theme.border}`, width: isTablet ? '80px' : '280px'}}>
             <div style={{ padding: '2rem', textAlign: 'center' }}>
@@ -166,7 +164,6 @@ export default function App() {
       )}
 
       <main style={{ flex: 1, marginLeft: isMobile ? 0 : (isTablet ? '80px' : '280px'), paddingBottom: isMobile ? '80px' : 0 }}>
-        
         <header style={{...ui.header, borderBottom: `1px solid ${theme.border}`}}>
             <div style={{fontWeight: 800, color: theme.primary, display: isMobile ? 'block' : 'none'}}>HAMS PRO</div>
             <div style={{flex: 1}}/>
