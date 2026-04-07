@@ -49,12 +49,22 @@ export const ModuleAssetDetail = ({ asset, onBack, onRefresh, session, theme, is
     return { percentUsed, remainingValue, diffMonths };
   }, [asset]);
 
-  // --- LOGIC AI DỰ BÁO ---
+  // --- LOGIC AI DỰ BÁO SỨC KHỎE (HEALTH SCORE) ---
   const aiForecast = useMemo(() => {
-    if (asset.trangThai === 'BROKEN') return { text: "Cần xử lý sự cố ngay lập tức.", color: theme.danger };
-    const health = 100 - depreciation.percentUsed * 0.5; // Sức khỏe linh kiện giảm chậm hơn khấu hao tiền tệ
-    if (health < 80) return { text: `Dự đoán: Cần bảo trì khối nguồn trong ${Math.max(1, 15 - depreciation.diffMonths)} ngày tới`, color: theme.warning };
-    return { text: "Hệ thống vận hành ổn định. Dự kiến bảo trì định kỳ sau 3 tháng.", color: theme.secondary };
+    const maintenanceEvents = asset.LichBaoTri || [];
+    const pendingIssues = maintenanceEvents.filter((e: any) => e.trangThai !== 'DONE').length;
+    
+    // Tính điểm sức khỏe: 100đ gốc - khấu hao - lỗi tồn đọng
+    let healthScore = 100 - (depreciation.percentUsed * 0.2); 
+    healthScore -= (pendingIssues * 15); // Mỗi lỗi chưa sửa trừ 15đ
+    healthScore = Math.max(5, Math.round(healthScore));
+
+    if (asset.trangThai === 'BROKEN' || healthScore < 40) 
+        return { score: healthScore, text: "Cần xử lý sự cố ngay lập tức.", color: theme.danger };
+    if (healthScore < 75) 
+        return { score: healthScore, text: `Dự đoán: Cần bảo dưỡng hệ thống trong ${Math.max(1, 15 - depreciation.diffMonths)} ngày tới`, color: theme.warning };
+    
+    return { score: healthScore, text: "Hệ thống vận hành ổn định. Dự kiến bảo trì định kỳ sau 3 tháng.", color: theme.secondary };
   }, [asset, theme, depreciation]);
 
   return (
@@ -74,7 +84,7 @@ export const ModuleAssetDetail = ({ asset, onBack, onRefresh, session, theme, is
         <div style={s.heroGrid(isMobile)}>
             <div style={s.imageColumn}>
                 <div style={{...s.deviceImageWrapper, background: theme.bg, borderColor: theme.border}}>
-                    <div style={s.imagePlaceholder}><ImageIcon size={48} color={theme.textMuted} /></div>
+                    <div style={s.imagePlaceholder}><Monitor size={64} color={theme.textMuted} strokeWidth={1} /></div>
                     <div style={s.imageStatusBadge(asset.trangThai)}>{asset.trangThai}</div>
                 </div>
             </div>
@@ -83,7 +93,7 @@ export const ModuleAssetDetail = ({ asset, onBack, onRefresh, session, theme, is
                 <div style={{color: theme.primary, fontWeight: 800, fontSize: '0.75rem', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: 8}}>Hồ sơ Digital Twin</div>
                 <h1 style={{margin: 0, fontSize: '2rem', fontWeight: 800, color: theme.text}}>{asset.tenThietBi}</h1>
                 <div style={s.subInfoGrid}>
-                    <div style={s.infoItem}><label style={{color: theme.textMuted}}>KHOA PHÒNG</label> <span style={{color: theme.text}}>{asset.KhoaPhong?.tenKhoaPhong}</span></div>
+                    <div style={s.infoItem}><label style={{color: theme.textMuted}}>KHOA PHÒNG</label> <span style={{color: theme.text}}>{asset.KhoaPhong?.tenKhoaPhong || 'Chưa phân khoa'}</span></div>
                     <div style={s.infoItem}><label style={{color: theme.textMuted}}>HÃNG SX</label> <span style={{color: theme.text}}>{asset.HangSanXuat?.tenHangSanXuat || '---'}</span></div>
                 </div>
                 <div style={s.ctaGroup}>
@@ -106,11 +116,11 @@ export const ModuleAssetDetail = ({ asset, onBack, onRefresh, session, theme, is
             
             <div style={s.healthSection} onClick={() => setShowHealthModal(true)}>
                 <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-                    <label style={{...s.metricLabel, color: theme.textMuted}}>KHẤU HAO THỰC TẾ</label>
-                    <b style={{fontSize: '1.1rem', color: depreciation.percentUsed > 80 ? theme.danger : theme.primary}}>{depreciation.percentUsed}% <Info size={14} style={{marginLeft:5}} /></b>
+                    <label style={{...s.metricLabel, color: theme.textMuted}}>CHỈ SỐ SỨC KHỎE (AI)</label>
+                    <b style={{fontSize: '1.1rem', color: aiForecast.color}}>{aiForecast.score}% <Info size={14} style={{marginLeft:5}} /></b>
                 </div>
                 <div style={{...s.healthBarContainer, background: theme.bg}}>
-                    <div style={s.healthBar(depreciation.percentUsed, depreciation.percentUsed > 80 ? theme.danger : theme.primary)} />
+                    <div style={s.healthBar(aiForecast.score, aiForecast.color)} />
                 </div>
                 <div style={{...s.aiForecast, color: aiForecast.color}}>
                     <Zap size={12} fill={aiForecast.color} /> {aiForecast.text}
@@ -127,8 +137,21 @@ export const ModuleAssetDetail = ({ asset, onBack, onRefresh, session, theme, is
       </div>
 
       <div className="glass-card" style={{padding: '3rem', background: theme.card, borderRadius: '24px', minHeight: '400px', border: `1px solid ${theme.border}`}}>
-        {activeTab === 'VONG_DOI' && <VerticalTimeline events={asset.QuanLySuCo} theme={theme} />}
-        {activeTab === 'TAI_CHINH' && <div style={{color: theme.textMuted}}>Chức năng đang phát triển...</div>}
+        {activeTab === 'VONG_DOI' && <VerticalTimeline events={asset.LichBaoTri} theme={theme} />}
+        {activeTab === 'TAI_CHINH' && (
+            <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'3rem'}}>
+                <div>
+                    <h3 style={{color: theme.text, marginBottom:'1.5rem'}}>Khấu hao lũy kế</h3>
+                    <div style={{fontSize:'2.5rem', fontWeight:800, color: theme.primary}}>{depreciation.percentUsed}%</div>
+                    <p style={{color: theme.textMuted}}>Thiết bị đã sử dụng được {depreciation.diffMonths} tháng trong tổng mốc 60 tháng khấu hao.</p>
+                </div>
+                <div style={{background: theme.bg, padding:'2rem', borderRadius:'20px'}}>
+                    <div style={{marginBottom:'1rem', display:'flex', justifyContent:'space-between'}}><span style={{color:theme.textMuted}}>Nguyên giá:</span> <b style={{color:theme.text}}>{formatMoney(asset.nguyenGia)}</b></div>
+                    <div style={{marginBottom:'1rem', display:'flex', justifyContent:'space-between'}}><span style={{color:theme.textMuted}}>Giá trị đã khấu hao:</span> <b style={{color:theme.danger}}>- {formatMoney(asset.nguyenGia - depreciation.remainingValue)}</b></div>
+                    <div style={{paddingTop:'1rem', borderTop:`1px solid ${theme.border}`, display:'flex', justifyContent:'space-between'}}><span style={{color:theme.textMuted}}>Giá trị hiện tại:</span> <b style={{color:theme.secondary, fontSize:'1.2rem'}}>{formatMoney(depreciation.remainingValue)}</b></div>
+                </div>
+            </div>
+        )}
         {activeTab === 'HO_SO' && <FilesTab files={asset.HoSoThietBi} theme={theme} />}
       </div>
 

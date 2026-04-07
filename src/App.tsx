@@ -83,9 +83,11 @@ export default function App() {
       // Join với các bảng quan hệ theo cấu trúc DB mới (UUID)
       let assetQuery = supabase.from('TrangThietBi').select(`
         *,
-        KhoaPhong(tenKhoaPhong),
-        HangSanXuat(tenHangSanXuat),
-        NguonGocThietBi(tenNguonGoc)
+        KhoaPhong(id, tenKhoaPhong),
+        HangSanXuat(id, tenHangSanXuat),
+        NguonGocThietBi(id, tenNguonGoc),
+        LichBaoTri(*),
+        HoSoThietBi(*)
       `).order('createdAt', { ascending: false });
 
       if (!isAdmin && userKhoaPhongId) {
@@ -96,25 +98,13 @@ export default function App() {
       
       if (assetError) {
           console.error('Asset Fetch Error:', assetError);
-          // Thử lại với tên bảng viết thường hoàn toàn nếu lỗi 404
-          if (assetError.code === 'PGRST205' || assetError.message.includes('not find')) {
-              const { data: retryData, error: retryError } = await supabase.from('trangthietbi').select('*').limit(10);
-              if (!retryError) {
-                  console.log('Retry success with lowercase table name');
-                  // Nếu thành công với bảng viết thường, ta nên cập nhật lại toàn bộ code
-                  setFetchError("Hệ thống phát hiện bảng DB đang dùng tên viết thường (trangthietbi). Vui lòng cập nhật SQL hoặc thông báo cho kỹ thuật.");
-              } else {
-                  setFetchError(`Lỗi kết nối bảng TrangThietBi: ${assetError.message}. Hãy kiểm tra xem bạn đã tạo bảng trong schema public chưa.`);
-              }
-          } else {
-              setFetchError(`Lỗi: ${assetError.message}`);
-          }
+          setFetchError(`Lỗi kết nối bảng TrangThietBi: ${assetError.message}. Hãy kiểm tra xem bạn đã tạo bảng trong schema public chưa.`);
       }
       setAssets(ads || []);
 
       // 2. Fetch Badges
-      let maintQuery = supabase.from('LichBaoTri').select('id', { count: 'exact' }).eq('trangThai', 'PENDING');
-      let transferQuery = supabase.from('DieuChuyenTaiSan').select('id', { count: 'exact' }).eq('trangThai', 'CHO_DUYET');
+      let maintQuery = supabase.from('LichBaoTri').select('id', { count: 'exact', head: true }).eq('trangThai', 'PENDING');
+      let transferQuery = supabase.from('DieuChuyenTaiSan').select('id', { count: 'exact', head: true }).eq('trangThai', 'CHO_DUYET');
 
       const [mRes, tRes] = await Promise.all([maintQuery, transferQuery]);
       setBadges({ 
