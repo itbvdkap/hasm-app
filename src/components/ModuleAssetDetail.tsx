@@ -31,16 +31,31 @@ export const ModuleAssetDetail = ({ asset, onBack, onRefresh, session, theme, is
   const [activeTab, setActiveTab] = useState('VONG_DOI');
   const [showHealthModal, setShowHealthModal] = useState(false);
 
-  const formatMoney = (v: any) => new Intl.NumberFormat('vi-VN').format(v || 0) + ' đ';
+  const formatMoney = (v: any) => new Intl.NumberFormat('vi-VN').format(Math.max(0, v || 0)) + ' đ';
   const formatDate = (d: any) => d ? new Date(d).toLocaleDateString('vi-VN') : '---';
+
+  // --- LOGIC TÍNH KHẤU HAO THỰC TẾ ---
+  const depreciation = useMemo(() => {
+    const startDate = new Date(asset.createdAt || new Date());
+    const now = new Date();
+    const totalMonths = 60; // 5 năm khấu hao
+    
+    const diffTime = Math.abs(now.getTime() - startDate.getTime());
+    const diffMonths = Math.ceil(diffTime / (1000 * 60 * 60 * 24 * 30.44));
+    
+    const percentUsed = Math.min(100, Math.round((diffMonths / totalMonths) * 100));
+    const remainingValue = asset.nguyenGia * (1 - percentUsed / 100);
+    
+    return { percentUsed, remainingValue, diffMonths };
+  }, [asset]);
 
   // --- LOGIC AI DỰ BÁO ---
   const aiForecast = useMemo(() => {
     if (asset.trangThai === 'BROKEN') return { text: "Cần xử lý sự cố ngay lập tức.", color: theme.danger };
-    const health = 72; // Giả lập dữ liệu từ IoT/Lịch sử
-    if (health < 80) return { text: "Dự đoán: Cần bảo trì khối nguồn trong 12 ngày tới (Độ tin cậy 89%)", color: theme.warning };
+    const health = 100 - depreciation.percentUsed * 0.5; // Sức khỏe linh kiện giảm chậm hơn khấu hao tiền tệ
+    if (health < 80) return { text: `Dự đoán: Cần bảo trì khối nguồn trong ${Math.max(1, 15 - depreciation.diffMonths)} ngày tới`, color: theme.warning };
     return { text: "Hệ thống vận hành ổn định. Dự kiến bảo trì định kỳ sau 3 tháng.", color: theme.secondary };
-  }, [asset, theme]);
+  }, [asset, theme, depreciation]);
 
   return (
     <div style={{...s.container, background: theme.bg, color: theme.text}}>
@@ -87,15 +102,15 @@ export const ModuleAssetDetail = ({ asset, onBack, onRefresh, session, theme, is
         {/* --- THANH TÌNH TRẠNG THÔNG MINH (INTERACTIVE HEALTH BAR) --- */}
         <div style={{...s.metricsGrid(isMobile), borderTop: `1.5px solid ${theme.border}`}}>
             <MetricItem label="NGUYÊN GIÁ" val={formatMoney(asset.nguyenGia)} color={theme.text} theme={theme} />
-            <MetricItem label="KHẤU HAO (81%)" val={formatMoney(asset.nguyenGia * 0.81)} color={theme.text} theme={theme} />
+            <MetricItem label={`GIÁ TRỊ CÒN LẠI (${100 - depreciation.percentUsed}%)`} val={formatMoney(depreciation.remainingValue)} color={theme.secondary} theme={theme} />
             
             <div style={s.healthSection} onClick={() => setShowHealthModal(true)}>
                 <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-                    <label style={{...s.metricLabel, color: theme.textMuted}}>TÌNH TRẠNG MÁY</label>
-                    <b style={{fontSize: '1.1rem', color: aiForecast.color}}>72% <Info size={14} style={{marginLeft:5}} /></b>
+                    <label style={{...s.metricLabel, color: theme.textMuted}}>KHẤU HAO THỰC TẾ</label>
+                    <b style={{fontSize: '1.1rem', color: depreciation.percentUsed > 80 ? theme.danger : theme.primary}}>{depreciation.percentUsed}% <Info size={14} style={{marginLeft:5}} /></b>
                 </div>
                 <div style={{...s.healthBarContainer, background: theme.bg}}>
-                    <div style={s.healthBar(72, aiForecast.color)} />
+                    <div style={s.healthBar(depreciation.percentUsed, depreciation.percentUsed > 80 ? theme.danger : theme.primary)} />
                 </div>
                 <div style={{...s.aiForecast, color: aiForecast.color}}>
                     <Zap size={12} fill={aiForecast.color} /> {aiForecast.text}

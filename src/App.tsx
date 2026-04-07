@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { supabase } from './lib/supabaseClient';
+import { supabase } from './lib/supabaseClient.js';
 import { 
   LayoutDashboard, 
   Package, 
@@ -12,7 +12,8 @@ import {
   LogOut,
   Sun,
   Moon,
-  UserCircle
+  UserCircle,
+  AlertTriangle
 } from 'lucide-react';
 
 // --- IMPORT MODULES ---
@@ -38,6 +39,7 @@ export default function App() {
   const [isTablet, setIsTablet] = useState(window.innerWidth > 768 && window.innerWidth <= 1024);
   const [themeMode, setThemeMode] = useState(() => localStorage.getItem('hams_theme') || 'light');
   const [isLoading, setIsLoading] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   useEffect(() => {
     document.body.setAttribute('data-theme', themeMode);
@@ -70,32 +72,76 @@ export default function App() {
   };
 
   const isAdmin = session?.Roles?.roleName === 'ADMIN' || session?.username === 'admin';
+  const userKhoaPhongId = session?.khoaPhongId;
 
   const fetchAllData = useCallback(async () => {
     if (!session) return;
     setIsLoading(true);
+    setFetchError(null);
     try {
-      const { data: ads } = await supabase.from('TrangThietBi').select('*, KhoaPhong(tenKhoaPhong), HangSanXuat(tenHangSanXuat), HoSoThietBi(*), QuanLySuCo(*)').order('createdAt', { ascending: false });
-      const [mRes, tRes] = await Promise.all([
-        supabase.from('LichBaoTri').select('id', { count: 'exact' }).eq('trangThai', 'PENDING'),
-        supabase.from('DieuChuyenTaiSan').select('id', { count: 'exact' }).eq('trangThai', 'CHO_DUYET')
-      ]);
-      setAssets(ads || []);
-      setBadges({ maint: mRes.count || 0, transfer: tRes.count || 0 });
-    } catch (e) { console.error(e); }
-    finally { setIsLoading(false); }
-  }, [session]);
+      // 1. Fetch Assets - Sử dụng bảng viết thường để tránh lỗi Schema Cache
+      // Join với các bảng quan hệ theo cấu trúc DB mới (UUID)
+      let assetQuery = supabase.from('TrangThietBi').select(`
+        *,
+        KhoaPhong(tenKhoaPhong),
+        HangSanXuat(tenHangSanXuat),
+        NguonGocThietBi(tenNguonGoc)
+      `).order('createdAt', { ascending: false });
 
-  useEffect(() => { fetchAllData(); }, [fetchAllData]);
+      if (!isAdmin && userKhoaPhongId) {
+        assetQuery = assetQuery.eq('khoaPhongId', userKhoaPhongId);
+      }
+
+      const { data: ads, error: assetError } = await assetQuery;
+      
+      if (assetError) {
+          console.error('Asset Fetch Error:', assetError);
+          // Thử lại với tên bảng viết thường hoàn toàn nếu lỗi 404
+          if (assetError.code === 'PGRST205' || assetError.message.includes('not find')) {
+              const { data: retryData, error: retryError } = await supabase.from('trangthietbi').select('*').limit(10);
+              if (!retryError) {
+                  console.log('Retry success with lowercase table name');
+                  // Nếu thành công với bảng viết thường, ta nên cập nhật lại toàn bộ code
+                  setFetchError("Hệ thống phát hiện bảng DB đang dùng tên viết thường (trangthietbi). Vui lòng cập nhật SQL hoặc thông báo cho kỹ thuật.");
+              } else {
+                  setFetchError(`Lỗi kết nối bảng TrangThietBi: ${assetError.message}. Hãy kiểm tra xem bạn đã tạo bảng trong schema public chưa.`);
+              }
+          } else {
+              setFetchError(`Lỗi: ${assetError.message}`);
+          }
+      }
+      setAssets(ads || []);
+
+      // 2. Fetch Badges
+      let maintQuery = supabase.from('LichBaoTri').select('id', { count: 'exact' }).eq('trangThai', 'PENDING');
+      let transferQuery = supabase.from('DieuChuyenTaiSan').select('id', { count: 'exact' }).eq('trangThai', 'CHO_DUYET');
+
+      const [mRes, tRes] = await Promise.all([maintQuery, transferQuery]);
+      setBadges({ 
+          maint: (mRes as any).count || 0, 
+          transfer: (tRes as any).count || 0 
+      });
+
+    } catch (e: any) { 
+        console.error('Fetch All Data Error:', e); 
+        setFetchError(`Lỗi hệ thống: ${e.message}`);
+    } finally { 
+        setIsLoading(false); 
+    }
+  }, [session, isAdmin, userKhoaPhongId]);
+
+  useEffect(() => { 
+    if (session) fetchAllData(); 
+  }, [session, fetchAllData]);
 
   if (!session) return <ModuleLogin onLoginSuccess={setSession} theme={theme} />;
   
-  if (isLoading) return <LoadingSpinner theme={theme} />;
+  if (isLoading && assets.length === 0) return <LoadingSpinner theme={theme} />;
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: theme.bg, color: theme.text, fontFamily: "'Inter', sans-serif" }}>
       
-      {/* 1. SIDEBAR (DESKTOP/TABLET) */}
+      {/* 1. SIDEBAR */}
       {!isMobile && (
         <aside style={{...ui.sidebar, background: theme.sidebar, borderRight: `1px solid ${theme.border}`, width: isTablet ? '80px' : '280px'}}>
             <div style={{ padding: '2rem', textAlign: 'center' }}>
@@ -119,7 +165,6 @@ export default function App() {
       {/* 2. MAIN CONTENT AREA */}
       <main style={{ flex: 1, marginLeft: isMobile ? 0 : (isTablet ? '80px' : '280px'), paddingBottom: isMobile ? '80px' : 0 }}>
         
-        {/* HEADER AREA WITH THEME TOGGLE */}
         <header style={{...ui.header, borderBottom: `1px solid ${theme.border}`}}>
             <div style={{fontWeight: 800, color: theme.primary, display: isMobile ? 'block' : 'none'}}>HAMS PRO</div>
             <div style={{flex: 1}}/>
@@ -128,10 +173,19 @@ export default function App() {
                     {themeMode === 'light' ? <Moon size={20}/> : <Sun size={20}/>}
                 </button>
                 <div onClick={()=>setView('ACCOUNT')} style={{...ui.avatar, border: `2px solid ${theme.primary}40`}}>
-                    {session.fullName.charAt(0)}
+                    {session.fullName?.charAt(0) || 'U'}
                 </div>
             </div>
         </header>
+
+        {/* Cảnh báo lỗi Fetch */}
+        {fetchError && (
+            <div style={{ margin: '1rem 3rem', padding: '1rem', background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: '12px', display: 'flex', gap: 12, alignItems: 'center', color: '#B91C1C' }}>
+                <AlertTriangle size={20} />
+                <div style={{ fontSize: '0.9rem', fontWeight: 600 }}>{fetchError}</div>
+                <button onClick={fetchAllData} style={{ marginLeft: 'auto', background: '#B91C1C', color: '#fff', border: 'none', padding: '4px 12px', borderRadius: '6px', cursor: 'pointer' }}>Thử lại</button>
+            </div>
+        )}
 
         <div style={{ padding: isMobile ? '1.5rem' : '3rem' }}>
             {view === 'DASHBOARD' && <ModuleDashboard assets={assets} theme={theme} isMobile={isMobile} />}
@@ -145,6 +199,7 @@ export default function App() {
             {view === 'TRANSFER' && <ModuleTransfer theme={theme} isMobile={isMobile} session={session} isAdmin={isAdmin} onRefresh={fetchAllData} />}
             {view === 'CATALOG' && <ModuleCatalog theme={theme} isMobile={isMobile} isAdmin={isAdmin} />}
             {view === 'REPORT' && <ModuleReport assets={assets} theme={theme} isMobile={isMobile} />}
+            {view === 'PUBLIC_SCAN' && <ModulePublicPortal theme={theme} onBack={() => setView('DASHBOARD')} />}
         </div>
       </main>
 
@@ -153,7 +208,7 @@ export default function App() {
         <nav style={{...ui.bottomNav, background: theme.sidebar, borderTop: `1px solid ${theme.border}`}}>
             <BottomItem active={view==='DASHBOARD'} icon={<LayoutDashboard size={22}/>} onClick={()=>setView('DASHBOARD')} theme={theme} />
             <BottomItem active={view==='ASSETS'} icon={<Package size={22}/>} onClick={()=>setView('ASSETS')} theme={theme} />
-            <div style={ui.fabContainer}><button style={{...ui.fab, background: theme.primary}}><ScanQrCode size={28} color="#fff" /></button></div>
+            <div style={ui.fabContainer}><button onClick={() => setView('PUBLIC_SCAN')} style={{...ui.fab, background: theme.primary}}><ScanQrCode size={28} color="#fff" /></button></div>
             <BottomItem active={view==='MAINTENANCE'} icon={<Wrench size={22}/>} onClick={()=>setView('MAINTENANCE')} theme={theme} />
             <BottomItem active={view==='REPORT'} icon={<BarChart3 size={22}/>} onClick={()=>setView('REPORT')} theme={theme} />
         </nav>

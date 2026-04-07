@@ -20,12 +20,15 @@ import {
   User as UserIcon,
   Trash2,
   Edit,
-  FileDown
+  FileDown,
+  LayoutGrid,
+  List as ListIcon
 } from 'lucide-react';
 
 export const ModuleCatalog = ({ theme, isMobile, isAdmin }: any) => {
   const [activeMenu, setActiveMenu] = useState('NHAN_VIEN');
   const [activeTab, setActiveTab] = useState('ALL'); // ALL, PENDING, BLOCKED
+  const [viewMode, setViewMode] = useState<'LIST' | 'GRID'>('LIST');
   const [data, setData] = useState<any[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
@@ -37,7 +40,7 @@ export const ModuleCatalog = ({ theme, isMobile, isAdmin }: any) => {
         title: 'HỆ THỐNG & PHÂN QUYỀN',
         items: [
             { id: 'NHAN_VIEN', label: 'Tài khoản & Nhân sự', icon: <Users size={18}/> },
-            { id: 'QUYEN', label: 'Vai trò & Quyền hạn', icon: <ShieldCheck size={18}/> }
+            { id: 'QUYEN', label: 'Vai trò & Quyền hạn', icon: <ShieldCheck size={18}/>, table: 'Roles', colName: 'roleName' }
         ]
     },
     {
@@ -45,8 +48,8 @@ export const ModuleCatalog = ({ theme, isMobile, isAdmin }: any) => {
         items: [
             { id: 'LOAI_TB', label: 'Loại thiết bị', icon: <Stethoscope size={18}/>, table: 'DanhMucThietBi', colName: 'tenThietBi', colCode: 'maThietBi' },
             { id: 'KHOA', label: 'Khoa / Phòng ban', icon: <Building2 size={18}/>, table: 'KhoaPhong', colName: 'tenKhoaPhong', colCode: 'maKhoaPhong' },
-            { id: 'HANG', label: 'Hãng sản xuất', icon: <Factory size={18}/>, table: 'HangSanXuat', colName: 'tenHangSanXuat', colCode: 'maHangSanXuat' },
-            { id: 'NGUON', label: 'Nguồn gốc / Xuất xứ', icon: <Globe size={18}/>, table: 'NguonGocThietBi', colName: 'tenNguonGoc', colCode: 'maNguonGoc' }
+            { id: 'HANG', label: 'Hãng sản xuất', icon: <Factory size={18}/>, table: 'HangSanXuat', colName: 'tenHangSanXuat' },
+            { id: 'NGUON', label: 'Nguồn gốc / Xuất xứ', icon: <Globe size={18}/>, table: 'NguonGocThietBi', colName: 'tenNguonGoc' }
         ]
     }
   ];
@@ -54,34 +57,54 @@ export const ModuleCatalog = ({ theme, isMobile, isAdmin }: any) => {
   const pendingCount = data.filter(u => u.status === 'PENDING').length;
 
   const getCurrentConfig = () => {
-      const group = MENU_GROUPS.find(g => g.items.find(i => i.id === activeMenu));
-      return group?.items.find(i => i.id === activeMenu);
+      for (const group of MENU_GROUPS) {
+          const item = group.items.find(i => i.id === activeMenu);
+          if (item) return item;
+      }
+      return null;
   };
 
   const fetchData = async () => {
     setLoading(true);
     const config = getCurrentConfig();
-    let query;
-
-    if (activeMenu === 'NHAN_VIEN') {
-        query = supabase.from('Users').select('*, KhoaPhong(tenKhoaPhong), Roles(roleName)');
-    } else if (config?.table) {
-        query = supabase.from(config.table).select('*');
-    } else {
-        setLoading(false); return;
+    try {
+        let query;
+        if (activeMenu === 'NHAN_VIEN') {
+            // Join với Roles và KhoaPhong dựa trên cấu trúc DB mới
+            query = supabase.from('Users').select(`
+                *,
+                KhoaPhong(tenKhoaPhong),
+                Roles(roleName)
+            `);
+        } else if (config?.table) {
+            query = supabase.from(config.table).select('*');
+        } else {
+            setLoading(false); return;
+        }
+        
+        const { data: res, error } = await query.order('createdAt', { ascending: false }).catch(() => query.order('id', { ascending: false }));
+        
+        if (error) throw error;
+        setData(res || []);
+    } catch (e: any) {
+        console.error(`Lỗi tải dữ liệu ${activeMenu}:`, e.message);
+        setData([]);
+    } finally {
+        setLoading(false);
     }
-    
-    const { data: res } = await query.order('id', { ascending: false });
-    setData(res || []);
-    setLoading(false);
   };
 
   useEffect(() => { fetchData(); }, [activeMenu]);
 
   const handleUserAction = async (userId: string, status: string) => {
     try {
-        if(status === 'REJECT') await supabase.from('Users').delete().eq('id', userId);
-        else await supabase.from('Users').update({ status }).eq('id', userId);
+        if(status === 'REJECT') {
+            const { error } = await supabase.from('Users').delete().eq('id', userId);
+            if (error) throw error;
+        } else {
+            const { error } = await supabase.from('Users').update({ status }).eq('id', userId);
+            if (error) throw error;
+        }
         alert("Đã cập nhật trạng thái nhân sự!"); fetchData();
     } catch (e: any) { alert(e.message); }
   };
@@ -111,7 +134,7 @@ export const ModuleCatalog = ({ theme, isMobile, isAdmin }: any) => {
       } catch (e: any) { alert(e.message); }
   };
 
-  const handleDeleteCatalog = async (id: number) => {
+  const handleDeleteCatalog = async (id: any) => {
       if(!window.confirm("Bạn có chắc chắn muốn xóa mục này?")) return;
       const config = getCurrentConfig();
       if(!config) return;
@@ -130,10 +153,12 @@ export const ModuleCatalog = ({ theme, isMobile, isAdmin }: any) => {
   const filtered = data.filter(i => {
     const config = getCurrentConfig();
     let mSearch = false;
-    if(activeMenu === 'NHAN_VIEN') mSearch = JSON.stringify(i).toLowerCase().includes(search.toLowerCase());
-    else if(config) {
+    if(activeMenu === 'NHAN_VIEN') {
+        mSearch = (i.fullName || '').toLowerCase().includes(search.toLowerCase()) || 
+                  (i.username || '').toLowerCase().includes(search.toLowerCase());
+    } else if(config) {
         mSearch = (i[config.colName!] || '').toLowerCase().includes(search.toLowerCase()) || 
-                  (i[config.colCode!] || '').toLowerCase().includes(search.toLowerCase());
+                  (config.colCode ? (i[config.colCode] || '').toLowerCase().includes(search.toLowerCase()) : false);
     }
 
     if (activeMenu === 'NHAN_VIEN') {
@@ -169,7 +194,6 @@ export const ModuleCatalog = ({ theme, isMobile, isAdmin }: any) => {
 
   return (
     <div style={{...s.mainWrapper, background: theme.bg, color: theme.text}}>
-      {/* 1. INNER SIDEBAR (MENU DỌC) */}
       {!isMobile && (
         <div style={{...s.innerSidebar, borderRight: `1px solid ${theme.border}`, background: theme.card}}>
             {MENU_GROUPS.map((group, idx) => (
@@ -186,7 +210,6 @@ export const ModuleCatalog = ({ theme, isMobile, isAdmin }: any) => {
         </div>
       )}
 
-      {/* 2. CONTENT AREA */}
       <div style={s.contentArea}>
         <div style={s.contentHeader}>
             <div>
@@ -200,14 +223,21 @@ export const ModuleCatalog = ({ theme, isMobile, isAdmin }: any) => {
             <div style={s.headerActions}>
                 <div style={{...s.searchBox, background: theme.card, borderColor: theme.border}}>
                     <Search size={18} color={theme.textMuted} />
-                    <input placeholder="Tìm kiếm..." style={{...s.searchInput, color: theme.text}} onChange={e=>setSearch(e.target.value)} />
+                    <input placeholder="Tìm kiếm..." style={{...s.searchInput, color: theme.text}} value={search} onChange={e=>setSearch(e.target.value)} />
                 </div>
+                
+                {!isMobile && activeMenu !== 'NHAN_VIEN' && (
+                    <div style={s.pillSwitcher(theme)}>
+                        <button onClick={()=>setViewMode('LIST')} style={s.pillBtn(viewMode==='LIST', theme)}><ListIcon size={16}/></button>
+                        <button onClick={()=>setViewMode('GRID')} style={s.pillBtn(viewMode==='GRID', theme)}><LayoutGrid size={16}/></button>
+                    </div>
+                )}
+
                 <button onClick={handleExport} style={s.exportBtn(theme)} title="Xuất báo cáo"><FileDown size={18}/></button>
                 <button onClick={()=>{setFormData({}); setShowModal(true)}} style={{...s.addBtn, background: theme.primary}}>+ Thêm mới</button>
             </div>
         </div>
 
-        {/* SUB TABS FOR USER MANAGEMENT */}
         {activeMenu === 'NHAN_VIEN' && (
             <div style={{...s.tabRow, borderColor: theme.border}}>
                 <button onClick={()=>setActiveTab('ALL')} style={s.subTab(activeTab==='ALL', theme)}>Tất cả nhân sự <small style={s.count(activeTab==='ALL', theme)}>{data.length}</small></button>
@@ -216,30 +246,42 @@ export const ModuleCatalog = ({ theme, isMobile, isAdmin }: any) => {
             </div>
         )}
 
-        {/* LIST OF CARDS */}
-        <div style={s.listGrid}>
-            {filtered.map(item => (
+        <div style={viewMode === 'LIST' ? s.listGrid : s.gridGrid}>
+            {loading ? <div style={{padding: '2rem', textAlign:'center', color: theme.textMuted}}>Đang tải dữ liệu...</div> : 
+             filtered.length === 0 ? <div style={{padding: '2rem', textAlign:'center', color: theme.textMuted}}>Không có dữ liệu hiển thị.</div> :
+             filtered.map(item => (
                 activeMenu === 'NHAN_VIEN' ? (
                     <UserCard key={item.id} user={item} onAction={handleUserAction} theme={theme} />
                 ) : (
-                    <div key={item.id} className="glass-card" style={{...s.simpleCard, background: theme.card, border: `1px solid ${theme.border}`}}>
-                        <div style={{flex: 1}}>
-                            <div style={{fontWeight: 700, color: theme.text}}>{item[config?.colName!] || '---'}</div>
-                            <div style={{fontSize:'0.8rem', color: theme.textMuted, marginTop: 5}}>
-                                {config?.colCode && item[config.colCode] ? item[config.colCode] : `ID: ${item.id}`}
+                    viewMode === 'LIST' ? (
+                        <div key={item.id} className="glass-card" style={{...s.simpleCard, background: theme.card, border: `1px solid ${theme.border}`}}>
+                            <div style={{flex: 1}}>
+                                <div style={{fontWeight: 700, color: theme.text}}>{item[config?.colName!] || '---'}</div>
+                                <div style={{fontSize:'0.8rem', color: theme.textMuted, marginTop: 5}}>
+                                    {config?.colCode && item[config.colCode] ? item[config.colCode] : `ID: ${item.id}`}
+                                </div>
+                            </div>
+                            <div style={{display:'flex', gap: 10}}>
+                                <button onClick={()=>{setFormData({id: item.id, name: item[config?.colName!], code: item[config?.colCode!]}); setShowModal(true)}} style={{...s.iconBtn, color: theme.textMuted}}><Edit size={16}/></button>
+                                <button onClick={()=>handleDeleteCatalog(item.id)} style={{...s.iconBtn, color: theme.danger}}><Trash2 size={16}/></button>
                             </div>
                         </div>
-                        <div style={{display:'flex', gap: 10}}>
-                            <button onClick={()=>{setFormData({id: item.id, name: item[config?.colName!], code: item[config?.colCode!]}); setShowModal(true)}} style={{...s.iconBtn, color: theme.textMuted}}><Edit size={16}/></button>
-                            <button onClick={()=>handleDeleteCatalog(item.id)} style={{...s.iconBtn, color: theme.danger}}><Trash2 size={16}/></button>
+                    ) : (
+                        <div key={item.id} className="glass-card" style={{...s.gridCard, background: theme.card, border: `1px solid ${theme.border}`}}>
+                            <div style={s.gridIcon(theme)}>{config?.icon}</div>
+                            <div style={{fontWeight: 800, marginTop: '1rem', textAlign:'center', color: theme.text}}>{item[config?.colName!]}</div>
+                            <div style={{fontSize:'0.75rem', color: theme.textMuted, marginTop: 5}}>{config?.colCode ? item[config.colCode] : `ID: ${item.id}`}</div>
+                            <div style={{display:'flex', gap: 10, marginTop: '1.5rem'}}>
+                                <button onClick={()=>{setFormData({id: item.id, name: item[config?.colName!], code: item[config?.colCode!]}); setShowModal(true)}} style={{...s.iconBtn, color: theme.textMuted}}><Edit size={16}/></button>
+                                <button onClick={()=>handleDeleteCatalog(item.id)} style={{...s.iconBtn, color: theme.danger}}><Trash2 size={16}/></button>
+                            </div>
                         </div>
-                    </div>
+                    )
                 )
             ))}
         </div>
       </div>
 
-      {/* MODAL CATALOG */}
       {showModal && activeMenu !== 'NHAN_VIEN' && (
           <div style={s.overlay}>
               <div style={{...s.modal, background: theme.card, border: `1px solid ${theme.border}`}}>
@@ -282,7 +324,7 @@ const UserCard = ({ user, onAction, theme }: any) => {
 
     return (
         <div className="glass-card" style={{...s.userCard, borderColor: isPending ? theme.warning : 'transparent', background: isPending ? theme.warning+'10' : theme.card, border: `1px solid ${isPending ? theme.warning : theme.border}`}}>
-            <div style={{...s.avatar(user.fullName.charAt(0)), background: theme.bg, color: theme.primary}}>{user.fullName.charAt(0)}</div>
+            <div style={{...s.avatar(user.fullName?.charAt(0) || 'U'), background: theme.bg, color: theme.primary}}>{user.fullName?.charAt(0) || 'U'}</div>
             <div style={{flex: 1}}>
                 <div style={{display:'flex', alignItems:'center', gap: 10}}>
                     <b style={{fontSize: '1rem', color: theme.text}}>{user.fullName}</b>
@@ -321,7 +363,6 @@ const s: any = {
   innerSidebar: { width: '280px', padding: '2.5rem 1.5rem' },
   groupTitle: { fontSize: '0.7rem', fontWeight: 800, color: '#94A3B8', letterSpacing: '1px', marginBottom: '1rem', paddingLeft: '1rem' },
   menuItem: (active: boolean, t: any) => ({ display:'flex', alignItems:'center', gap: 12, padding: '0.8rem 1rem', borderRadius: '12px', cursor:'pointer', transition: '0.3s', background: active ? `${t.primary}15` : 'transparent', color: active ? t.primary : t.textMuted, fontWeight: active ? 700 : 500, fontSize: '0.9rem', marginBottom: 4 }),
-  
   contentArea: { flex: 1, padding: '2.5rem 3.5rem' },
   contentHeader: { display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom: '2.5rem' },
   headerActions: { display:'flex', gap: '1rem', alignItems:'center' },
@@ -329,26 +370,28 @@ const s: any = {
   searchInput: { border:'none', outline:'none', flex: 1, padding: '0.8rem 0', fontSize: '0.9rem', background: 'none' },
   addBtn: { border:'none', padding: '0.8rem 1.5rem', borderRadius: '12px', color:'#fff', fontWeight: 700, cursor:'pointer' },
   exportBtn: (t: any) => ({ background: t.card, border: `1px solid ${t.border}`, color: t.textMuted, width: 45, height: 45, borderRadius: '12px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }),
-  
   tabRow: { display:'flex', gap: '2rem', borderBottom: '1.5px solid', marginBottom: '2rem' },
   subTab: (active: boolean, t: any) => ({ background: 'none', border: 'none', padding: '1rem 0', cursor: 'pointer', fontSize: '0.95rem', fontWeight: active ? 800 : 500, color: active ? t.text : t.textMuted, position:'relative', borderBottom: active ? `3px solid ${t.primary}` : '3px solid transparent' }),
   count: (active: boolean, t: any) => ({ marginLeft: 8, padding: '2px 8px', borderRadius: '6px', background: active ? t.primary+'20' : t.bg, fontSize: '0.75rem', color: active ? t.primary : t.textMuted }),
-  
   listGrid: { display:'flex', flexDirection:'column', gap: '1rem' },
   userCard: { display:'flex', alignItems:'center', gap: '1.5rem', padding: '1.25rem 2rem', borderRadius: '20px' },
   avatar: (char: string) => ({ width: 50, height: 50, borderRadius: '50%', display:'flex', justifyContent:'center', alignItems:'center', fontSize: '1.2rem', fontWeight: 800, border: '2px solid transparent' }),
   newBadge: { fontSize: '0.65rem', fontWeight: 800, padding: '2px 8px', borderRadius: '6px' },
   roleBadge: { padding: '4px 12px', borderRadius: '8px', border: '1.5px solid', fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase' },
-  
   approveBtn: { color: '#fff', border: 'none', padding: '0.6rem 1.25rem', borderRadius: '10px', fontWeight: 700, cursor:'pointer', display:'flex', alignItems:'center', gap: 6 },
   rejectBtn: { background: 'none', border: 'none', fontWeight: 700, cursor:'pointer', padding: '0.6rem 1rem' },
   moreBtn: { background:'none', border:'none', cursor:'pointer' },
   simpleCard: { padding: '1.5rem', borderRadius: '16px', display:'flex', justifyContent:'space-between', alignItems:'center' },
+  gridGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1.5rem' },
+  gridCard: { padding: '2rem', borderRadius: '24px', display:'flex', flexDirection:'column', alignItems:'center', transition: '0.3s' },
+  gridIcon: (t: any) => ({ width: 60, height: 60, borderRadius: '18px', background: t.primary+'15', color: t.primary, display:'flex', justifyContent:'center', alignItems:'center' }),
+  pillSwitcher: (t: any) => ({ display: 'flex', background: t.bg, padding: '4px', borderRadius: '10px', border: `1px solid ${t.border}` }),
+  pillBtn: (active: boolean, t: any) => ({ border: 'none', padding: '8px 12px', borderRadius: '8px', cursor: 'pointer', background: active ? t.card : 'transparent', color: active ? t.primary : t.textMuted, transition: '0.3s' }),
   iconBtn: { border:'none', background:'none', cursor:'pointer', padding: 5 },
   overlay: { position:'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display:'flex', justifyContent:'center', alignItems:'center', zIndex: 2000 },
   modal: { width: '100%', maxWidth: '400px', borderRadius: '16px', overflow: 'hidden' },
   label: { fontSize: '0.85rem', fontWeight: 700, display:'block', marginBottom: 5 },
-  input: { padding: '0.8rem 1rem', borderRadius: '10px', border: '1px solid', fontSize: '0.9rem', outline: 'none', width: '100%', boxSizing: 'border-box' },
+  input: { padding: '0.8rem 1rem', borderRadius: '10px', border: '1px solid', fontSize: '0.9rem', outline: 'none', width: '100%', boxSizing:'border-box' },
   cancelBtn: { padding: '0.8rem 1.5rem', borderRadius: '12px', border: 'none', background: '#F1F5F9', color: '#64748B', fontWeight: 700, cursor: 'pointer' },
   saveBtn: { padding: '0.8rem 1.5rem', borderRadius: '12px', border: 'none', color: '#fff', fontWeight: 700, cursor: 'pointer' }
 };
