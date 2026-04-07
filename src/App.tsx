@@ -79,9 +79,8 @@ export default function App() {
     setIsLoading(true);
     setFetchError(null);
     try {
-      // 1. Fetch Assets - Sử dụng bảng viết thường để tránh lỗi Schema Cache
-      // Join với các bảng quan hệ theo cấu trúc DB mới (UUID)
-      let assetQuery = supabase.from('TrangThietBi').select(`
+      // Thử bảng viết hoa trước (CamelCase)
+      let { data: ads, error: assetError } = await supabase.from('TrangThietBi').select(`
         *,
         KhoaPhong(id, tenKhoaPhong),
         HangSanXuat(id, tenHangSanXuat),
@@ -90,23 +89,24 @@ export default function App() {
         HoSoThietBi(*)
       `).order('createdAt', { ascending: false });
 
-      if (!isAdmin && userKhoaPhongId) {
-        assetQuery = assetQuery.eq('khoaPhongId', userKhoaPhongId);
+      // Nếu lỗi 404 (không tìm thấy bảng), thử bảng viết thường hoàn toàn
+      if (assetError && (assetError.code === 'PGRST204' || assetError.message.includes('not find'))) {
+          console.log('Retrying with lowercase table names...');
+          const { data: retryData, error: retryError } = await supabase.from('trangthietbi').select('*').order('created_at', { ascending: false });
+          if (retryError) throw retryError;
+          ads = retryData;
+      } else if (assetError) {
+          throw assetError;
       }
 
-      const { data: ads, error: assetError } = await assetQuery;
-      
-      if (assetError) {
-          console.error('Asset Fetch Error:', assetError);
-          setFetchError(`Lỗi kết nối bảng TrangThietBi: ${assetError.message}. Hãy kiểm tra xem bạn đã tạo bảng trong schema public chưa.`);
-      }
       setAssets(ads || []);
 
-      // 2. Fetch Badges
-      let maintQuery = supabase.from('LichBaoTri').select('id', { count: 'exact', head: true }).eq('trangThai', 'PENDING');
-      let transferQuery = supabase.from('DieuChuyenTaiSan').select('id', { count: 'exact', head: true }).eq('trangThai', 'CHO_DUYET');
-
-      const [mRes, tRes] = await Promise.all([maintQuery, transferQuery]);
+      // Fetch Badges
+      const [mRes, tRes] = await Promise.all([
+          supabase.from('LichBaoTri').select('id', { count: 'exact', head: true }).eq('trangThai', 'PENDING'),
+          supabase.from('DieuChuyenTaiSan').select('id', { count: 'exact', head: true }).eq('trangThai', 'CHO_DUYET')
+      ]);
+      
       setBadges({ 
           maint: (mRes as any).count || 0, 
           transfer: (tRes as any).count || 0 
@@ -114,7 +114,7 @@ export default function App() {
 
     } catch (e: any) { 
         console.error('Fetch All Data Error:', e); 
-        setFetchError(`Lỗi hệ thống: ${e.message}`);
+        setFetchError(`Lỗi kết nối Database: ${e.message}. Vui lòng kiểm tra Biến môi trường trên Vercel.`);
     } finally { 
         setIsLoading(false); 
     }
