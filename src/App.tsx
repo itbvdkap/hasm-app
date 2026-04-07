@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { supabase } from './lib/supabaseClient.js';
+import { supabase, isConfigured } from './lib/supabaseClient';
 import { 
   LayoutDashboard, 
   Package, 
@@ -75,7 +75,7 @@ export default function App() {
   const userKhoaPhongId = session?.khoaPhongId;
 
   const fetchAllData = useCallback(async () => {
-    if (!session) return;
+    if (!session || !isConfigured) return;
     setIsLoading(true);
     setFetchError(null);
     try {
@@ -89,9 +89,7 @@ export default function App() {
         HoSoThietBi(*)
       `).order('createdAt', { ascending: false });
 
-      // Nếu lỗi 404 (không tìm thấy bảng), thử bảng viết thường hoàn toàn
       if (assetError && (assetError.code === 'PGRST204' || assetError.message.includes('not find'))) {
-          console.log('Retrying with lowercase table names...');
           const { data: retryData, error: retryError } = await supabase.from('trangthietbi').select('*').order('created_at', { ascending: false });
           if (retryError) throw retryError;
           ads = retryData;
@@ -101,7 +99,6 @@ export default function App() {
 
       setAssets(ads || []);
 
-      // Fetch Badges
       const [mRes, tRes] = await Promise.all([
           supabase.from('LichBaoTri').select('id', { count: 'exact', head: true }).eq('trangThai', 'PENDING'),
           supabase.from('DieuChuyenTaiSan').select('id', { count: 'exact', head: true }).eq('trangThai', 'CHO_DUYET')
@@ -114,7 +111,7 @@ export default function App() {
 
     } catch (e: any) { 
         console.error('Fetch All Data Error:', e); 
-        setFetchError(`Lỗi kết nối Database: ${e.message}. Vui lòng kiểm tra Biến môi trường trên Vercel.`);
+        setFetchError(`Lỗi kết nối Database: ${e.message}`);
     } finally { 
         setIsLoading(false); 
     }
@@ -149,7 +146,6 @@ export default function App() {
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: theme.bg, color: theme.text, fontFamily: "'Inter', sans-serif" }}>
       
-      {/* 1. SIDEBAR */}
       {!isMobile && (
         <aside style={{...ui.sidebar, background: theme.sidebar, borderRight: `1px solid ${theme.border}`, width: isTablet ? '80px' : '280px'}}>
             <div style={{ padding: '2rem', textAlign: 'center' }}>
@@ -170,7 +166,6 @@ export default function App() {
         </aside>
       )}
 
-      {/* 2. MAIN CONTENT AREA */}
       <main style={{ flex: 1, marginLeft: isMobile ? 0 : (isTablet ? '80px' : '280px'), paddingBottom: isMobile ? '80px' : 0 }}>
         
         <header style={{...ui.header, borderBottom: `1px solid ${theme.border}`}}>
@@ -186,7 +181,6 @@ export default function App() {
             </div>
         </header>
 
-        {/* Cảnh báo lỗi Fetch */}
         {fetchError && (
             <div style={{ margin: '1rem 3rem', padding: '1rem', background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: '12px', display: 'flex', gap: 12, alignItems: 'center', color: '#B91C1C' }}>
                 <AlertTriangle size={20} />
@@ -211,7 +205,6 @@ export default function App() {
         </div>
       </main>
 
-      {/* 3. BOTTOM NAV (MOBILE) */}
       {isMobile && (
         <nav style={{...ui.bottomNav, background: theme.sidebar, borderTop: `1px solid ${theme.border}`}}>
             <BottomItem active={view==='DASHBOARD'} icon={<LayoutDashboard size={22}/>} onClick={()=>setView('DASHBOARD')} theme={theme} />
