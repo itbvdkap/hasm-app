@@ -79,7 +79,6 @@ export default function App() {
     setIsLoading(true);
     setFetchError(null);
     try {
-      // Thử bảng viết hoa trước (CamelCase)
       let { data: ads, error: assetError } = await supabase.from('TrangThietBi').select(`
         *,
         KhoaPhong(id, tenKhoaPhong),
