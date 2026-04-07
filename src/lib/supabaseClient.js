@@ -1,15 +1,23 @@
 // --- HAMS SUPABASE CLIENT CONFIG ---
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || ''
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || ''
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
-export const isConfigured = supabaseUrl !== '' && supabaseKey !== '';
+// Biến kiểm tra cấu hình
+export const isConfigured = !!(supabaseUrl && supabaseKey && supabaseUrl.startsWith('https://'));
 
-export const supabase = isConfigured 
-  ? createClient(supabaseUrl, supabaseKey) 
-  : (null as any);
+// Khởi tạo Supabase an toàn
+let supabaseInstance = null;
 
-if (!isConfigured) {
-  console.warn('⚠️ HAMS PRO: Missing Supabase Config. Please check Vercel Env Vars.');
+if (isConfigured) {
+  try {
+    supabaseInstance = createClient(supabaseUrl, supabaseKey);
+  } catch (e) {
+    console.error('Lỗi khởi tạo Supabase:', e);
+  }
+} else {
+  console.warn('⚠️ HAMS PRO: Thiếu cấu hình Supabase hợp lệ.');
 }
+
+export const supabase = supabaseInstance;
