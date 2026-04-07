@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { supabase, isConfigured } from './lib/supabaseClient';
+import { supabase, isConfigured, supabaseUrl } from './lib/supabaseClient';
 import { 
   LayoutDashboard, 
   Package, 
@@ -13,7 +13,8 @@ import {
   Sun,
   Moon,
   UserCircle,
-  AlertTriangle
+  AlertTriangle,
+  Globe
 } from 'lucide-react';
 
 import { ModuleDashboard } from './components/ModuleDashboard';
@@ -109,7 +110,11 @@ export default function App() {
 
     } catch (e: any) { 
         console.error('Fetch All Data Error:', e); 
-        setFetchError(`Lỗi kết nối Database: ${e.message}`);
+        let msg = e.message;
+        if (msg === 'Failed to fetch') {
+            msg = `Không thể kết nối mạng tới Supabase (${supabaseUrl}). Vui lòng kiểm tra Internet hoặc dự án bị Paused.`;
+        }
+        setFetchError(`Lỗi kết nối Database: ${msg}`);
     } finally { 
         setIsLoading(false); 
     }
