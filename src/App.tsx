@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { supabase, isConfigured, supabaseUrl } from './lib/supabaseClient';
+import { supabase, isOnline } from './lib/supabaseClient';
 import { 
   LayoutDashboard, 
   Package, 
@@ -14,7 +14,7 @@ import {
   Moon,
   UserCircle,
   AlertTriangle,
-  Globe
+  Database
 } from 'lucide-react';
 
 import { ModuleDashboard } from './components/ModuleDashboard';
@@ -71,36 +71,21 @@ export default function App() {
     shadow: 'var(--shadow)'
   };
 
-  const isAdmin = session?.Roles?.roleName === 'ADMIN' || session?.username === 'admin';
+  const isAdmin = session?.Roles?.roleName === 'ADMIN' || session?.username === 'admin' || !isOnline;
   const userKhoaPhongId = session?.khoaPhongId;
 
   const fetchAllData = useCallback(async () => {
-    if (!session || !isConfigured) return;
     setIsLoading(true);
     setFetchError(null);
     try {
-      let { data: ads, error: assetError } = await supabase.from('TrangThietBi').select(`
-        *,
-        KhoaPhong(id, tenKhoaPhong),
-        HangSanXuat(id, tenHangSanXuat),
-        NguonGocThietBi(id, tenNguonGoc),
-        LichBaoTri(*),
-        HoSoThietBi(*)
-      `).order('createdAt', { ascending: false });
-
-      if (assetError && (assetError.code === 'PGRST204' || assetError.message.includes('not find'))) {
-          const { data: retryData, error: retryError } = await supabase.from('trangthietbi').select('*').order('created_at', { ascending: false });
-          if (retryError) throw retryError;
-          ads = retryData;
-      } else if (assetError) {
-          throw assetError;
-      }
-
+      // Logic fetch linh hoạt Online/Offline
+      const { data: ads, error: assetError } = await supabase.from('TrangThietBi').select('*');
+      if (assetError) throw assetError;
       setAssets(ads || []);
 
       const [mRes, tRes] = await Promise.all([
-          supabase.from('LichBaoTri').select('id', { count: 'exact', head: true }).eq('trangThai', 'PENDING'),
-          supabase.from('DieuChuyenTaiSan').select('id', { count: 'exact', head: true }).eq('trangThai', 'CHO_DUYET')
+          supabase.from('LichBaoTri').select('id', { count: 'exact' }),
+          supabase.from('DieuChuyenTaiSan').select('id', { count: 'exact' })
       ]);
       
       setBadges({ 
@@ -109,45 +94,36 @@ export default function App() {
       });
 
     } catch (e: any) { 
-        console.error('Fetch All Data Error:', e); 
-        let msg = e.message;
-        if (msg === 'Failed to fetch') {
-            msg = `Không thể kết nối mạng tới Supabase (${supabaseUrl}). Vui lòng kiểm tra Internet hoặc dự án bị Paused.`;
-        }
-        setFetchError(`Lỗi kết nối Database: ${msg}`);
+        console.error('Fetch error:', e);
+        if (isOnline) setFetchError(`Lỗi kết nối Supabase: ${e.message}`);
     } finally { 
         setIsLoading(false); 
     }
-  }, [session, isAdmin, userKhoaPhongId]);
+  }, [session]);
 
   useEffect(() => { 
-    if (session) fetchAllData(); 
+    if (session || !isOnline) fetchAllData(); 
   }, [session, fetchAllData]);
 
-  if (!isConfigured) {
-    return (
-      <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', background: '#F8FAFC', padding: '2rem', textAlign: 'center', fontFamily: 'sans-serif' }}>
-        <div style={{ background: '#fff', padding: '3rem', borderRadius: '24px', boxShadow: '0 20px 50px rgba(0,0,0,0.1)', maxWidth: '500px' }}>
-          <AlertTriangle size={64} color="#EF4444" style={{ marginBottom: '1.5rem' }} />
-          <h2 style={{ margin: '0 0 1rem 0', color: '#1E293B' }}>Thiếu cấu hình hệ thống</h2>
-          <p style={{ color: '#64748B', lineHeight: '1.6', marginBottom: '2rem', fontSize: '0.9rem' }}>
-            Ứng dụng HAMS PRO chưa được kết nối với cơ sở dữ liệu Supabase. 
-            Vui lòng thiết lập biến môi trường trong tệp <b>.env</b> (Local) hoặc trên Vercel Dashboard.
-          </p>
-          <a href="https://vercel.com" target="_blank" rel="noreferrer" style={{ display: 'inline-block', background: '#2563EB', color: '#fff', padding: '12px 24px', borderRadius: '12px', textDecoration: 'none', fontWeight: 700 }}>
-            Đi tới Vercel Dashboard
-          </a>
-        </div>
-      </div>
-    );
-  }
+  // Giả lập session nếu chạy Local
+  useEffect(() => {
+    if (!isOnline && !session) {
+      setSession({ username: 'admin', fullName: 'HAMS Local Admin', Roles: { roleName: 'ADMIN' } });
+    }
+  }, [session]);
 
-  if (!session) return <ModuleLogin onLoginSuccess={setSession} theme={theme} />;
-  
-  if (isLoading && assets.length === 0) return <LoadingSpinner theme={theme} />;
+  if (isLoading && assets.length === 0 && isOnline) return <LoadingSpinner theme={theme} />;
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: theme.bg, color: theme.text, fontFamily: "'Inter', sans-serif" }}>
+      
+      {/* LOCAL MODE INDICATOR */}
+      {!isOnline && (
+        <div style={{ position:'fixed', top: 10, right: 100, zIndex: 9999, background: theme.warning, color: '#000', padding: '4px 12px', borderRadius: '20px', fontSize: '0.7rem', fontWeight: 800, display:'flex', alignItems:'center', gap: 5 }}>
+          <Database size={12} /> LOCAL ENGINE ACTIVE
+        </div>
+      )}
+
       {!isMobile && (
         <aside style={{...ui.sidebar, background: theme.sidebar, borderRight: `1px solid ${theme.border}`, width: isTablet ? '80px' : '280px'}}>
             <div style={{ padding: '2rem', textAlign: 'center' }}>
@@ -177,7 +153,7 @@ export default function App() {
                     {themeMode === 'light' ? <Moon size={20}/> : <Sun size={20}/>}
                 </button>
                 <div onClick={()=>setView('ACCOUNT')} style={{...ui.avatar, border: `2px solid ${theme.primary}40`}}>
-                    {session.fullName?.charAt(0) || 'U'}
+                    {session?.fullName?.charAt(0) || 'U'}
                 </div>
             </div>
         </header>
